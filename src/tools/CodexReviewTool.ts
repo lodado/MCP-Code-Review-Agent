@@ -1,8 +1,8 @@
 import { MCPTool } from "mcp-framework";
 import { z } from "zod";
 import { execSync } from "child_process";
-import { readFileSync, existsSync } from "fs";
-import { join } from "path";
+import { readFileSync, existsSync, accessSync, constants, statSync } from "fs";
+import { join, resolve, normalize, relative } from "path";
 
 interface CodexReviewInput {
   repositoryPath?: string;
@@ -40,7 +40,115 @@ interface CodeReviewResult {
 class CodexReviewTool extends MCPTool<CodexReviewInput> {
   name = "codex_review";
   description =
-    "Git status를 분석하여 코드 리뷰를 수행하고 개선 사항을 제안합니다";
+    "Analyzes Git status to perform code review and suggest improvements";
+
+  // Allowed file extensions list
+  private readonly ALLOWED_EXTENSIONS = [
+    "ts",
+    "tsx",
+    "js",
+    "jsx",
+    "py",
+    "java",
+    "go",
+    "cpp",
+    "c",
+    "h",
+    "hpp",
+    "cs",
+    "php",
+    "rb",
+    "swift",
+    "kt",
+    "scala",
+    "rs",
+    "vue",
+    "svelte",
+  ];
+
+  // Maximum file size (1MB)
+  private readonly MAX_FILE_SIZE = 1024 * 1024;
+
+  // 보안: 경로 검증 및 정규화
+  private validateAndNormalizePath(
+    inputPath: string,
+    basePath: string
+  ): string {
+    if (!inputPath || typeof inputPath !== "string") {
+      throw new Error("유효하지 않은 경로입니다");
+    }
+
+    // 경로 정규화
+    const normalizedPath = normalize(inputPath);
+
+    // 절대 경로로 변환
+    const absolutePath = resolve(basePath, normalizedPath);
+
+    // 경로 조작 공격 방지: basePath 밖으로 나가는지 확인
+    const relativePath = relative(basePath, absolutePath);
+    if (relativePath.startsWith("..") || relativePath.includes("..")) {
+      throw new Error("허용되지 않은 경로입니다");
+    }
+
+    return absolutePath;
+  }
+
+  // 보안: 파일 접근 권한 검사
+  private validateFileAccess(filePath: string): boolean {
+    try {
+      // 파일 존재 여부 확인
+      if (!existsSync(filePath)) {
+        return false;
+      }
+
+      // 읽기 권한 확인
+      accessSync(filePath, constants.R_OK);
+
+      // 파일 크기 확인
+      const stats = statSync(filePath);
+      if (stats.size > this.MAX_FILE_SIZE) {
+        throw new Error("파일이 너무 큽니다");
+      }
+
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  // 보안: 파일 확장자 검증
+  private validateFileExtension(filePath: string): boolean {
+    const extension = filePath.split(".").pop()?.toLowerCase();
+    return extension ? this.ALLOWED_EXTENSIONS.includes(extension) : false;
+  }
+
+  // 보안: 안전한 Git 명령어 실행
+  private safeExecGitCommand(command: string, cwd: string): string {
+    try {
+      // 작업 디렉토리 검증
+      const validatedCwd = this.validateAndNormalizePath(cwd, process.cwd());
+
+      // Git 명령어 화이트리스트 검증
+      const allowedCommands = [
+        "git status --porcelain",
+        "git branch --show-current",
+        "git rev-list --left-right --count HEAD@{upstream}...HEAD",
+      ];
+
+      if (!allowedCommands.includes(command)) {
+        throw new Error("허용되지 않은 Git 명령어입니다");
+      }
+
+      return execSync(command, {
+        cwd: validatedCwd,
+        encoding: "utf8",
+        timeout: 10000, // 10초 타임아웃
+        maxBuffer: 1024 * 1024, // 1MB 버퍼 제한
+      });
+    } catch (error) {
+      throw new Error("Git 명령어 실행 실패");
+    }
+  }
 
   schema = {
     repositoryPath: {
@@ -66,6 +174,19 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
     } = input;
 
     try {
+      // 보안: 입력 검증
+      if (typeof repositoryPath !== "string" || repositoryPath.length === 0) {
+        throw new Error("유효하지 않은 저장소 경로입니다");
+      }
+
+      if (!["full", "staged", "modified"].includes(reviewType)) {
+        throw new Error("유효하지 않은 리뷰 타입입니다");
+      }
+
+      if (typeof includeSuggestions !== "boolean") {
+        throw new Error("유효하지 않은 제안 포함 옵션입니다");
+      }
+
       // Git 상태 분석
       const gitStatus = await this.analyzeGitStatus(repositoryPath);
 
@@ -147,32 +268,39 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
 
       return output;
     } catch (error) {
-      throw new Error(
-        `코드 리뷰 실패: ${
-          error instanceof Error ? error.message : "알 수 없는 오류"
-        }`
-      );
+      // 보안: 에러 메시지에서 민감한 정보 제거
+      const errorMessage =
+        error instanceof Error ? error.message : "알 수 없는 오류";
+
+      // 시스템 정보가 포함된 에러 메시지 필터링
+      if (
+        errorMessage.includes("ENOENT") ||
+        errorMessage.includes("EACCES") ||
+        errorMessage.includes("EPERM") ||
+        errorMessage.includes("path") ||
+        errorMessage.includes("directory")
+      ) {
+        throw new Error("파일 또는 디렉토리 접근 오류가 발생했습니다");
+      }
+
+      throw new Error(`코드 리뷰 실패: ${errorMessage}`);
     }
   }
 
   private async analyzeGitStatus(repoPath: string): Promise<GitStatus> {
     try {
-      const gitStatusOutput = execSync("git status --porcelain", {
-        cwd: repoPath,
-        encoding: "utf8",
-      });
-
-      const branchOutput = execSync("git branch --show-current", {
-        cwd: repoPath,
-        encoding: "utf8",
-      }).trim();
-
-      const aheadBehindOutput = execSync(
+      // 보안: 안전한 Git 명령어 실행
+      const gitStatusOutput = this.safeExecGitCommand(
+        "git status --porcelain",
+        repoPath
+      );
+      const branchOutput = this.safeExecGitCommand(
+        "git branch --show-current",
+        repoPath
+      ).trim();
+      const aheadBehindOutput = this.safeExecGitCommand(
         "git rev-list --left-right --count HEAD@{upstream}...HEAD",
-        {
-          cwd: repoPath,
-          encoding: "utf8",
-        }
+        repoPath
       ).trim();
 
       const [ahead, behind] = aheadBehindOutput.split("\t").map(Number);
@@ -212,9 +340,8 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
         deleted,
       };
     } catch (error) {
-      throw new Error(
-        "Git 상태 분석 실패: 저장소가 아닌 디렉토리이거나 Git이 설치되지 않았습니다"
-      );
+      // 보안: Git 관련 에러 메시지 일반화
+      throw new Error("Git 저장소 분석에 실패했습니다");
     }
   }
 
@@ -240,68 +367,107 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
     repoPath: string,
     includeSuggestions: boolean
   ): Promise<CodeReviewResult["files"][0]> {
-    const fullPath = join(repoPath, filePath);
+    try {
+      // 보안: 파일 경로 검증 및 정규화
+      const validatedRepoPath = this.validateAndNormalizePath(
+        repoPath,
+        process.cwd()
+      );
+      const validatedFilePath = this.validateAndNormalizePath(
+        filePath,
+        validatedRepoPath
+      );
 
-    if (!existsSync(fullPath)) {
+      // 보안: 파일 확장자 검증
+      if (!this.validateFileExtension(filePath)) {
+        return {
+          path: filePath,
+          status: "skipped",
+          issues: [
+            {
+              type: "warning",
+              message: "지원되지 않는 파일 형식입니다",
+            },
+          ],
+          score: 0,
+        };
+      }
+
+      // 보안: 파일 접근 권한 검사
+      if (!this.validateFileAccess(validatedFilePath)) {
+        return {
+          path: filePath,
+          status: "inaccessible",
+          issues: [
+            {
+              type: "error",
+              message: "파일에 접근할 수 없습니다",
+            },
+          ],
+          score: 0,
+        };
+      }
+
+      const content = readFileSync(validatedFilePath, "utf8");
+      const issues: CodeReviewResult["files"][0]["issues"] = [];
+
+      // 파일 확장자에 따른 리뷰 로직
+      const extension = filePath.split(".").pop()?.toLowerCase();
+
+      switch (extension) {
+        case "ts":
+        case "tsx":
+          this.reviewTypeScriptFile(
+            content,
+            filePath,
+            issues,
+            includeSuggestions
+          );
+          break;
+        case "js":
+        case "jsx":
+          this.reviewJavaScriptFile(
+            content,
+            filePath,
+            issues,
+            includeSuggestions
+          );
+          break;
+        case "py":
+          this.reviewPythonFile(content, filePath, issues, includeSuggestions);
+          break;
+        case "java":
+          this.reviewJavaFile(content, filePath, issues, includeSuggestions);
+          break;
+        case "go":
+          this.reviewGoFile(content, filePath, issues, includeSuggestions);
+          break;
+        default:
+          this.reviewGenericFile(content, filePath, issues, includeSuggestions);
+      }
+
+      const score = this.calculateFileScore(issues);
+
       return {
         path: filePath,
-        status: "deleted",
+        status: "reviewed",
+        issues,
+        score,
+      };
+    } catch (error) {
+      // 보안: 파일 처리 에러 일반화
+      return {
+        path: filePath,
+        status: "error",
         issues: [
           {
-            type: "warning",
-            message: "파일이 삭제되었습니다",
+            type: "error",
+            message: "파일 처리 중 오류가 발생했습니다",
           },
         ],
         score: 0,
       };
     }
-
-    const content = readFileSync(fullPath, "utf8");
-    const issues: CodeReviewResult["files"][0]["issues"] = [];
-
-    // 파일 확장자에 따른 리뷰 로직
-    const extension = filePath.split(".").pop()?.toLowerCase();
-
-    switch (extension) {
-      case "ts":
-      case "tsx":
-        this.reviewTypeScriptFile(
-          content,
-          filePath,
-          issues,
-          includeSuggestions
-        );
-        break;
-      case "js":
-      case "jsx":
-        this.reviewJavaScriptFile(
-          content,
-          filePath,
-          issues,
-          includeSuggestions
-        );
-        break;
-      case "py":
-        this.reviewPythonFile(content, filePath, issues, includeSuggestions);
-        break;
-      case "java":
-        this.reviewJavaFile(content, filePath, issues, includeSuggestions);
-        break;
-      case "go":
-        this.reviewGoFile(content, filePath, issues, includeSuggestions);
-        break;
-      default:
-        this.reviewGenericFile(content, filePath, issues, includeSuggestions);
-    }
-
-    const score = this.calculateFileScore(issues);
-
-    return {
-      path: filePath,
-      status: "reviewed",
-      issues,
-      score,
-    };
   }
 
   private reviewTypeScriptFile(
