@@ -51,9 +51,49 @@ Return a JSON object with this structure:
       };
     }
 
-    const parsed = JSON.parse(jsonMatch[0]);
-    const validated = ReviewResponseSchema.parse(parsed);
-    return validated;
+    try {
+      const parsed = JSON.parse(jsonMatch[0]);
+
+      // Codex CLI returns different format, convert to our schema
+      if (parsed.findings !== undefined) {
+        const points = (parsed.findings || []).map((finding: any) => ({
+          file: finding.file || "unknown",
+          line: finding.line,
+          severity: finding.severity || "info",
+          title: finding.title || "Code review finding",
+          message: finding.message || finding.description || "",
+          suggestion: finding.suggestion || finding.recommendation || "",
+        }));
+
+        // Add notes as info points
+        if (parsed.notes && Array.isArray(parsed.notes)) {
+          parsed.notes.forEach((note: string) => {
+            points.push({
+              file: "general",
+              severity: "info",
+              title: "Review Note",
+              message: note,
+              suggestion: "",
+            });
+          });
+        }
+
+        return {
+          summary: parsed.summary || "Code review completed",
+          points: points,
+        };
+      }
+
+      // Try to parse as our expected format
+      const validated = ReviewResponseSchema.parse(parsed);
+      return validated;
+    } catch (parseError) {
+      console.error("JSON parsing error:", parseError);
+      return {
+        summary: `Codex response: ${jsonMatch[0].substring(0, 200)}...`,
+        points: [],
+      };
+    }
   } catch (error) {
     console.error("Codex CLI error:", error);
     return {

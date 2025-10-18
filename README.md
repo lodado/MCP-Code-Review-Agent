@@ -30,6 +30,36 @@ npm install -g @openai/codex
 npm install
 ```
 
+## 🚀 MCP 서버 지원
+
+이 프로젝트는 **MCP (Model Context Protocol)** 서버로도 사용할 수 있습니다!
+
+### Cursor IDE에서 사용하기
+
+1. **MCP 서버 설정**:
+
+```json
+{
+  "mcpServers": {
+    "codex-reviewer": {
+      "command": "node",
+      "args": ["--loader", "ts-node/esm", "src/mcp-server.ts"],
+      "cwd": "/path/to/codex-review-pipeline"
+    }
+  }
+}
+```
+
+2. **Cursor에서 사용**:
+
+```
+@codex-reviewer review_diff staged
+@codex-reviewer review_diff last
+@codex-reviewer review_diff file src/example.ts
+```
+
+자세한 설정 방법은 [CURSOR_MCP_SETUP.md](./CURSOR_MCP_SETUP.md)를 참조하세요.
+
 ## 🎯 사용법
 
 ### 기본 명령어
