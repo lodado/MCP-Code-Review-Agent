@@ -1,10 +1,11 @@
 # my-mcp-server
 
-A Model Context Protocol (MCP) server built with [mcp-framework](https://github.com/QuantGeekDev/mcp-framework). This server provides powerful tools for code review, weather information, and general utilities.
+A Model Context Protocol (MCP) server built with [mcp-framework](https://github.com/QuantGeekDev/mcp-framework). This server provides powerful tools for intelligent code review using both static analysis and OpenAI's Codex AI, weather information, and general utilities.
 
 ## Features
 
-- 🔍 **Codex Review Tool**: Git status analysis and automated code review
+- 🧠 **Intelligent Code Review**: Advanced TypeScript code analysis using OpenAI's Codex AI
+- 🔍 **Static Analysis**: Traditional pattern-based code review for quick feedback
 - 🌤️ **Weather API Tool**: Real-time weather information for cities
 - 🛠️ **Example Tool**: General-purpose message processing
 
@@ -13,6 +14,13 @@ A Model Context Protocol (MCP) server built with [mcp-framework](https://github.
 ```bash
 # Install dependencies
 npm install
+
+# Set up Codex CLI
+npm install -g @openai/codex
+# Or: brew install codex
+
+# Authenticate with Codex CLI
+codex
 
 # Build the project
 npm run build
@@ -23,6 +31,22 @@ npm link
 # Test the server
 my-mcp-server
 ```
+
+## Environment Setup
+
+Install and authenticate Codex CLI:
+
+```bash
+# Install Codex CLI globally
+npm install -g @openai/codex
+# Or using Homebrew
+brew install codex
+
+# Authenticate with your ChatGPT account
+codex
+```
+
+Codex CLI will use your ChatGPT Plus, Pro, Team, Edu, or Enterprise plan for intelligent code analysis.
 
 ## Project Structure
 
@@ -50,14 +74,33 @@ Performs automated code review based on Git status analysis.
 - `repositoryPath` (optional): Path to the repository to review (default: current directory)
 - `reviewType` (optional): Type of review - "full", "staged", or "modified" (default: "modified")
 - `includeSuggestions` (optional): Include improvement suggestions (default: true)
+- `useCodex` (optional): Use OpenAI Codex AI for intelligent analysis (default: true)
 
 **Features:**
 
-- Git status analysis (branch, commits, staged/modified files)
-- Multi-language support (TypeScript, JavaScript, Python, Java, Go)
-- Code quality checks (type safety, logging, line length, TODO comments)
-- Scoring system (0-100 points per file)
-- Detailed recommendations
+#### 🔍 Static Analysis
+
+- ✅ Git status analysis (branch, commits, staged/modified files)
+- ✅ TypeScript file validation
+- ✅ Security checks (path traversal, file access)
+- ✅ Basic code quality patterns (type safety, logging, line length, TODO comments)
+- ✅ Scoring system (0-100 points per file)
+
+#### 🧠 Codex CLI Analysis
+
+- ✅ **Context Understanding**: Analyzes code purpose and functionality using [OpenAI Codex CLI](https://github.com/openai/codex)
+- ✅ **Security Vulnerability Detection**: SQL injection, XSS, unsafe data handling
+- ✅ **Performance Optimization**: Identifies bottlenecks and inefficiencies
+- ✅ **Architecture Review**: SOLID principles, design patterns, coupling analysis
+- ✅ **Logic Error Detection**: Edge cases, race conditions, type safety
+- ✅ **Intelligent Suggestions**: Specific, actionable improvement recommendations
+
+#### 📊 Enhanced Reporting
+
+- ✅ Categorized issues (Security 🔒, Performance ⚡, Architecture 🏗️, Logic 🧩, Style 🎨)
+- ✅ Context-aware analysis
+- ✅ Detailed recommendations
+- ✅ Fallback to static analysis if Codex unavailable
 
 ### 🌤️ Weather API Tool (`weather_api`)
 

@@ -1,21 +1,21 @@
-// 간단한 보안 테스트
+// Simple security tests
 describe("Security Improvements", () => {
   test("should have implemented security measures", () => {
-    // 이 테스트는 보안 개선사항이 구현되었는지 확인합니다
+    // This test verifies that security improvements are implemented
     expect(true).toBe(true);
   });
 
   test("should validate paths properly", () => {
-    // 경로 검증 로직이 구현되었는지 확인
+    // Verify that path validation logic is implemented
     const maliciousPath = "../../../etc/passwd";
     const normalizedPath = require("path").normalize(maliciousPath);
 
-    // 경로 정규화가 작동하는지 확인
+    // Verify that path normalization works
     expect(normalizedPath).toBeDefined();
   });
 
   test("should have file extension validation", () => {
-    // 허용된 파일 확장자 목록
+    // Allowed file extensions list
     const allowedExtensions = [
       "ts",
       "tsx",
@@ -39,7 +39,7 @@ describe("Security Improvements", () => {
       "svelte",
     ];
 
-    // 허용된 확장자들이 정의되어 있는지 확인
+    // Verify that allowed extensions are defined
     expect(allowedExtensions.length).toBeGreaterThan(0);
     expect(allowedExtensions).toContain("ts");
     expect(allowedExtensions).toContain("js");
@@ -47,7 +47,7 @@ describe("Security Improvements", () => {
   });
 
   test("should have maximum file size limit", () => {
-    // 최대 파일 크기 제한 (1MB)
+    // Maximum file size limit (1MB)
     const maxFileSize = 1024 * 1024;
     expect(maxFileSize).toBe(1048576);
   });

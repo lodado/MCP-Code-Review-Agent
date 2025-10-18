@@ -1,13 +1,22 @@
 import { MCPTool } from "mcp-framework";
 import { z } from "zod";
-import { execSync } from "child_process";
-import { readFileSync, existsSync, accessSync, constants, statSync } from "fs";
+import { execSync, spawn } from "child_process";
+import {
+  readFileSync,
+  existsSync,
+  accessSync,
+  constants,
+  statSync,
+  writeFileSync,
+  unlinkSync,
+} from "fs";
 import { join, resolve, normalize, relative } from "path";
 
 interface CodexReviewInput {
   repositoryPath?: string;
   reviewType?: "full" | "staged" | "modified";
   includeSuggestions?: boolean;
+  useCodex?: boolean;
 }
 
 interface GitStatus {
@@ -30,8 +39,22 @@ interface CodeReviewResult {
       line?: number;
       message: string;
       suggestion?: string;
+      category?:
+        | "security"
+        | "performance"
+        | "architecture"
+        | "logic"
+        | "style";
     }>;
     score: number;
+    codexAnalysis?: {
+      context: string;
+      securityIssues: string[];
+      performanceIssues: string[];
+      architectureIssues: string[];
+      logicIssues: string[];
+      suggestions: string[];
+    };
   }>;
   overallScore: number;
   recommendations: string[];
@@ -40,74 +63,56 @@ interface CodeReviewResult {
 class CodexReviewTool extends MCPTool<CodexReviewInput> {
   name = "codex_review";
   description =
-    "Analyzes Git status to perform code review and suggest improvements";
+    "Analyzes Git status to perform code review and suggest improvements using both static analysis and Codex AI";
 
-  // Allowed file extensions list
-  private readonly ALLOWED_EXTENSIONS = [
-    "ts",
-    "tsx",
-    "js",
-    "jsx",
-    "py",
-    "java",
-    "go",
-    "cpp",
-    "c",
-    "h",
-    "hpp",
-    "cs",
-    "php",
-    "rb",
-    "swift",
-    "kt",
-    "scala",
-    "rs",
-    "vue",
-    "svelte",
-  ];
+  // Allowed file extensions list (TypeScript only)
+  private readonly ALLOWED_EXTENSIONS = ["ts", "tsx"];
+
+  // Codex CLI availability check
+  private codexAvailable: boolean = false;
 
   // Maximum file size (1MB)
   private readonly MAX_FILE_SIZE = 1024 * 1024;
 
-  // 보안: 경로 검증 및 정규화
+  // Security: Path validation and normalization
   private validateAndNormalizePath(
     inputPath: string,
     basePath: string
   ): string {
     if (!inputPath || typeof inputPath !== "string") {
-      throw new Error("유효하지 않은 경로입니다");
+      throw new Error("Invalid path provided");
     }
 
-    // 경로 정규화
+    // Normalize path
     const normalizedPath = normalize(inputPath);
 
-    // 절대 경로로 변환
+    // Convert to absolute path
     const absolutePath = resolve(basePath, normalizedPath);
 
-    // 경로 조작 공격 방지: basePath 밖으로 나가는지 확인
+    // Prevent path traversal attacks: check if path goes outside basePath
     const relativePath = relative(basePath, absolutePath);
     if (relativePath.startsWith("..") || relativePath.includes("..")) {
-      throw new Error("허용되지 않은 경로입니다");
+      throw new Error("Path traversal not allowed");
     }
 
     return absolutePath;
   }
 
-  // 보안: 파일 접근 권한 검사
+  // Security: File access permission check
   private validateFileAccess(filePath: string): boolean {
     try {
-      // 파일 존재 여부 확인
+      // Check if file exists
       if (!existsSync(filePath)) {
         return false;
       }
 
-      // 읽기 권한 확인
+      // Check read permission
       accessSync(filePath, constants.R_OK);
 
-      // 파일 크기 확인
+      // Check file size
       const stats = statSync(filePath);
       if (stats.size > this.MAX_FILE_SIZE) {
-        throw new Error("파일이 너무 큽니다");
+        throw new Error("File is too large");
       }
 
       return true;
@@ -116,19 +121,19 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
     }
   }
 
-  // 보안: 파일 확장자 검증
+  // Security: File extension validation
   private validateFileExtension(filePath: string): boolean {
     const extension = filePath.split(".").pop()?.toLowerCase();
     return extension ? this.ALLOWED_EXTENSIONS.includes(extension) : false;
   }
 
-  // 보안: 안전한 Git 명령어 실행
+  // Security: Safe Git command execution
   private safeExecGitCommand(command: string, cwd: string): string {
     try {
-      // 작업 디렉토리 검증
+      // Validate working directory
       const validatedCwd = this.validateAndNormalizePath(cwd, process.cwd());
 
-      // Git 명령어 화이트리스트 검증
+      // Git command whitelist validation
       const allowedCommands = [
         "git status --porcelain",
         "git branch --show-current",
@@ -136,33 +141,37 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
       ];
 
       if (!allowedCommands.includes(command)) {
-        throw new Error("허용되지 않은 Git 명령어입니다");
+        throw new Error("Git command not allowed");
       }
 
       return execSync(command, {
         cwd: validatedCwd,
         encoding: "utf8",
-        timeout: 10000, // 10초 타임아웃
-        maxBuffer: 1024 * 1024, // 1MB 버퍼 제한
+        timeout: 10000, // 10 second timeout
+        maxBuffer: 1024 * 1024, // 1MB buffer limit
       });
     } catch (error) {
-      throw new Error("Git 명령어 실행 실패");
+      throw new Error("Git command execution failed");
     }
   }
 
   schema = {
     repositoryPath: {
       type: z.string().optional(),
-      description: "리뷰할 저장소 경로 (기본값: 현재 디렉토리)",
+      description: "Repository path to review (default: current directory)",
     },
     reviewType: {
       type: z.enum(["full", "staged", "modified"]).optional(),
       description:
-        "리뷰 타입: full(전체), staged(스테이징된 파일), modified(수정된 파일)",
+        "Review type: full(all), staged(staged files), modified(modified files)",
     },
     includeSuggestions: {
       type: z.boolean().optional(),
-      description: "개선 제안 포함 여부",
+      description: "Whether to include improvement suggestions",
+    },
+    useCodex: {
+      type: z.boolean().optional(),
+      description: "Whether to use Codex AI for intelligent code review",
     },
   };
 
@@ -171,48 +180,64 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
       repositoryPath = process.cwd(),
       reviewType = "modified",
       includeSuggestions = true,
+      useCodex = true,
     } = input;
 
     try {
-      // 보안: 입력 검증
+      // Security: Input validation
       if (typeof repositoryPath !== "string" || repositoryPath.length === 0) {
-        throw new Error("유효하지 않은 저장소 경로입니다");
+        throw new Error("Invalid repository path");
       }
 
       if (!["full", "staged", "modified"].includes(reviewType)) {
-        throw new Error("유효하지 않은 리뷰 타입입니다");
+        throw new Error("Invalid review type");
       }
 
       if (typeof includeSuggestions !== "boolean") {
-        throw new Error("유효하지 않은 제안 포함 옵션입니다");
+        throw new Error("Invalid suggestion inclusion option");
       }
 
-      // Git 상태 분석
+      if (typeof useCodex !== "boolean") {
+        throw new Error("Invalid Codex usage option");
+      }
+
+      // Check Codex CLI availability if Codex is enabled
+      if (useCodex) {
+        this.codexAvailable = await this.checkCodexAvailability();
+        if (!this.codexAvailable) {
+          console.warn(
+            "Codex CLI not available. Falling back to static analysis only."
+          );
+        }
+      }
+
+      // Analyze Git status
       const gitStatus = await this.analyzeGitStatus(repositoryPath);
 
-      // 리뷰할 파일 목록 결정
+      // Determine files to review
       const filesToReview = this.getFilesToReview(gitStatus, reviewType);
 
       if (filesToReview.length === 0) {
-        return "리뷰할 파일이 없습니다. 모든 파일이 깨끗합니다!";
+        return "No files to review. All files are clean!";
       }
 
-      // 각 파일에 대해 코드 리뷰 수행
+      // Perform code review for each file
       const reviewResults: CodeReviewResult["files"] = [];
 
       for (const filePath of filesToReview) {
         const review = await this.reviewFile(
           filePath,
           repositoryPath,
-          includeSuggestions
+          includeSuggestions,
+          useCodex
         );
         reviewResults.push(review);
       }
 
-      // 전체 점수 계산
+      // Calculate overall score
       const overallScore = this.calculateOverallScore(reviewResults);
 
-      // 권장사항 생성
+      // Generate recommendations
       const recommendations = this.generateRecommendations(
         reviewResults,
         gitStatus
@@ -225,41 +250,68 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
         recommendations,
       };
 
-      // 결과를 읽기 쉬운 문자열 형태로 반환
-      let output = `📊 코드 리뷰 결과\n`;
+      // Return results in readable string format
+      let output = `📊 Code Review Results\n`;
       output += `=${"=".repeat(50)}\n\n`;
       output += `📋 ${result.summary}\n\n`;
 
       if (result.files.length > 0) {
-        output += `📁 파일별 상세 결과:\n`;
+        output += `📁 Detailed Results by File:\n`;
         output += `-`.repeat(50) + `\n`;
 
         result.files.forEach((file, index) => {
-          output += `${index + 1}. ${file.path} (점수: ${file.score}/100)\n`;
+          output += `${index + 1}. ${file.path} (Score: ${file.score}/100)\n`;
+
+          // Show Codex analysis context if available
+          if (file.codexAnalysis?.context) {
+            output += `   🧠 Context: ${file.codexAnalysis.context}\n`;
+          }
 
           if (file.issues.length > 0) {
-            file.issues.forEach((issue, issueIndex) => {
-              const icon =
-                issue.type === "error"
-                  ? "❌"
-                  : issue.type === "warning"
-                  ? "⚠️"
-                  : "💡";
-              const lineInfo = issue.line ? ` (라인 ${issue.line})` : "";
-              output += `   ${icon} ${issue.message}${lineInfo}\n`;
-              if (issue.suggestion) {
-                output += `      💭 제안: ${issue.suggestion}\n`;
-              }
+            // Group issues by category
+            const issuesByCategory = file.issues.reduce((acc, issue) => {
+              const category = issue.category || "general";
+              if (!acc[category]) acc[category] = [];
+              acc[category].push(issue);
+              return acc;
+            }, {} as Record<string, typeof file.issues>);
+
+            Object.entries(issuesByCategory).forEach(([category, issues]) => {
+              const categoryIcon =
+                {
+                  security: "🔒",
+                  performance: "⚡",
+                  architecture: "🏗️",
+                  logic: "🧩",
+                  style: "🎨",
+                  general: "📝",
+                }[category] || "📝";
+
+              output += `   ${categoryIcon} ${category.toUpperCase()}:\n`;
+
+              issues.forEach((issue) => {
+                const icon =
+                  issue.type === "error"
+                    ? "❌"
+                    : issue.type === "warning"
+                    ? "⚠️"
+                    : "💡";
+                const lineInfo = issue.line ? ` (Line ${issue.line})` : "";
+                output += `      ${icon} ${issue.message}${lineInfo}\n`;
+                if (issue.suggestion) {
+                  output += `         💭 Suggestion: ${issue.suggestion}\n`;
+                }
+              });
             });
           } else {
-            output += `   ✅ 이슈 없음\n`;
+            output += `   ✅ No issues\n`;
           }
           output += `\n`;
         });
       }
 
       if (result.recommendations.length > 0) {
-        output += `💡 권장사항:\n`;
+        output += `💡 Recommendations:\n`;
         output += `-`.repeat(50) + `\n`;
         result.recommendations.forEach((rec, index) => {
           output += `${index + 1}. ${rec}\n`;
@@ -268,11 +320,11 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
 
       return output;
     } catch (error) {
-      // 보안: 에러 메시지에서 민감한 정보 제거
+      // Security: Remove sensitive information from error messages
       const errorMessage =
-        error instanceof Error ? error.message : "알 수 없는 오류";
+        error instanceof Error ? error.message : "Unknown error";
 
-      // 시스템 정보가 포함된 에러 메시지 필터링
+      // Filter error messages containing system information
       if (
         errorMessage.includes("ENOENT") ||
         errorMessage.includes("EACCES") ||
@@ -280,16 +332,16 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
         errorMessage.includes("path") ||
         errorMessage.includes("directory")
       ) {
-        throw new Error("파일 또는 디렉토리 접근 오류가 발생했습니다");
+        throw new Error("File or directory access error occurred");
       }
 
-      throw new Error(`코드 리뷰 실패: ${errorMessage}`);
+      throw new Error(`Code review failed: ${errorMessage}`);
     }
   }
 
   private async analyzeGitStatus(repoPath: string): Promise<GitStatus> {
     try {
-      // 보안: 안전한 Git 명령어 실행
+      // Security: Safe Git command execution
       const gitStatusOutput = this.safeExecGitCommand(
         "git status --porcelain",
         repoPath
@@ -340,8 +392,8 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
         deleted,
       };
     } catch (error) {
-      // 보안: Git 관련 에러 메시지 일반화
-      throw new Error("Git 저장소 분석에 실패했습니다");
+      // Security: Generalize Git-related error messages
+      throw new Error("Failed to analyze Git repository");
     }
   }
 
@@ -365,10 +417,11 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
   private async reviewFile(
     filePath: string,
     repoPath: string,
-    includeSuggestions: boolean
+    includeSuggestions: boolean,
+    useCodex: boolean
   ): Promise<CodeReviewResult["files"][0]> {
     try {
-      // 보안: 파일 경로 검증 및 정규화
+      // Security: File path validation and normalization
       const validatedRepoPath = this.validateAndNormalizePath(
         repoPath,
         process.cwd()
@@ -378,7 +431,7 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
         validatedRepoPath
       );
 
-      // 보안: 파일 확장자 검증
+      // Security: File extension validation
       if (!this.validateFileExtension(filePath)) {
         return {
           path: filePath,
@@ -386,14 +439,14 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
           issues: [
             {
               type: "warning",
-              message: "지원되지 않는 파일 형식입니다",
+              message: "Unsupported file format",
             },
           ],
           score: 0,
         };
       }
 
-      // 보안: 파일 접근 권한 검사
+      // Security: File access permission check
       if (!this.validateFileAccess(validatedFilePath)) {
         return {
           path: filePath,
@@ -401,7 +454,7 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
           issues: [
             {
               type: "error",
-              message: "파일에 접근할 수 없습니다",
+              message: "Cannot access file",
             },
           ],
           score: 0,
@@ -411,39 +464,38 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
       const content = readFileSync(validatedFilePath, "utf8");
       const issues: CodeReviewResult["files"][0]["issues"] = [];
 
-      // 파일 확장자에 따른 리뷰 로직
+      // Review TypeScript files only
       const extension = filePath.split(".").pop()?.toLowerCase();
 
-      switch (extension) {
-        case "ts":
-        case "tsx":
-          this.reviewTypeScriptFile(
-            content,
-            filePath,
-            issues,
-            includeSuggestions
-          );
-          break;
-        case "js":
-        case "jsx":
-          this.reviewJavaScriptFile(
-            content,
-            filePath,
-            issues,
-            includeSuggestions
-          );
-          break;
-        case "py":
-          this.reviewPythonFile(content, filePath, issues, includeSuggestions);
-          break;
-        case "java":
-          this.reviewJavaFile(content, filePath, issues, includeSuggestions);
-          break;
-        case "go":
-          this.reviewGoFile(content, filePath, issues, includeSuggestions);
-          break;
-        default:
-          this.reviewGenericFile(content, filePath, issues, includeSuggestions);
+      if (extension === "ts" || extension === "tsx") {
+        this.reviewTypeScriptFile(
+          content,
+          filePath,
+          issues,
+          includeSuggestions
+        );
+      } else {
+        // For non-TypeScript files, just do basic checks
+        this.reviewGenericFile(content, filePath, issues, includeSuggestions);
+      }
+
+      // Perform Codex analysis if enabled
+      let codexAnalysis:
+        | CodeReviewResult["files"][0]["codexAnalysis"]
+        | undefined;
+      if (
+        useCodex &&
+        this.codexAvailable &&
+        (extension === "ts" || extension === "tsx")
+      ) {
+        try {
+          codexAnalysis = await this.performCodexAnalysis(content, filePath);
+
+          // Convert Codex analysis to issues
+          this.convertCodexAnalysisToIssues(codexAnalysis, issues);
+        } catch (error) {
+          console.warn(`Codex analysis failed for ${filePath}:`, error);
+        }
       }
 
       const score = this.calculateFileScore(issues);
@@ -453,16 +505,17 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
         status: "reviewed",
         issues,
         score,
+        codexAnalysis,
       };
     } catch (error) {
-      // 보안: 파일 처리 에러 일반화
+      // Security: Generalize file processing errors
       return {
         path: filePath,
         status: "error",
         issues: [
           {
             type: "error",
-            message: "파일 처리 중 오류가 발생했습니다",
+            message: "Error occurred while processing file",
           },
         ],
         score: 0,
@@ -478,213 +531,72 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
   ): void {
     const lines = content.split("\n");
 
-    // 기본적인 TypeScript 리뷰 규칙들
+    // Basic TypeScript review rules
     lines.forEach((line, index) => {
       const lineNumber = index + 1;
 
-      // any 타입 사용 체크
+      // Check for any type usage
       if (line.includes(": any") && !line.includes("// eslint-disable")) {
         issues.push({
           type: "warning",
           line: lineNumber,
-          message: "any 타입 사용을 피하세요",
+          message: "Avoid using any type",
           suggestion: includeSuggestions
-            ? "구체적인 타입을 정의하거나 unknown을 사용하세요"
+            ? "Define specific types or use unknown"
             : undefined,
         });
       }
 
-      // console.log 체크
+      // Check for console.log
       if (line.includes("console.log") && !line.includes("// TODO")) {
         issues.push({
           type: "warning",
           line: lineNumber,
-          message: "프로덕션 코드에서 console.log 사용을 피하세요",
+          message: "Avoid console.log in production code",
           suggestion: includeSuggestions
-            ? "로깅 라이브러리 사용을 고려하세요"
+            ? "Consider using a logging library"
             : undefined,
         });
       }
 
-      // 긴 라인 체크
+      // Check for long lines
       if (line.length > 120) {
         issues.push({
           type: "suggestion",
           line: lineNumber,
-          message: "라인이 너무 깁니다",
+          message: "Line is too long",
           suggestion: includeSuggestions
-            ? "라인을 분할하거나 변수명을 줄이세요"
+            ? "Split the line or shorten variable names"
             : undefined,
         });
       }
 
-      // TODO/FIXME 체크
+      // Check for TODO/FIXME
       if (line.includes("TODO") || line.includes("FIXME")) {
         issues.push({
           type: "suggestion",
           line: lineNumber,
-          message: "TODO/FIXME 주석이 있습니다",
+          message: "TODO/FIXME comment found",
           suggestion: includeSuggestions
-            ? "이슈를 해결하거나 이슈 트래커에 등록하세요"
+            ? "Resolve the issue or register it in the issue tracker"
             : undefined,
         });
       }
     });
 
-    // 함수 복잡도 체크
+    // Check function complexity
     const functionMatches = content.match(
       /function\s+\w+|const\s+\w+\s*=\s*\(/g
     );
     if (functionMatches && functionMatches.length > 10) {
       issues.push({
         type: "suggestion",
-        message: "파일에 너무 많은 함수가 있습니다",
+        message: "Too many functions in file",
         suggestion: includeSuggestions
-          ? "파일을 여러 개로 분할하는 것을 고려하세요"
+          ? "Consider splitting the file into multiple files"
           : undefined,
       });
     }
-  }
-
-  private reviewJavaScriptFile(
-    content: string,
-    filePath: string,
-    issues: CodeReviewResult["files"][0]["issues"],
-    includeSuggestions: boolean
-  ): void {
-    // JavaScript는 TypeScript와 유사하지만 타입 체크 제외
-    const lines = content.split("\n");
-
-    lines.forEach((line, index) => {
-      const lineNumber = index + 1;
-
-      if (line.includes("console.log") && !line.includes("// TODO")) {
-        issues.push({
-          type: "warning",
-          line: lineNumber,
-          message: "프로덕션 코드에서 console.log 사용을 피하세요",
-          suggestion: includeSuggestions
-            ? "로깅 라이브러리 사용을 고려하세요"
-            : undefined,
-        });
-      }
-
-      if (line.length > 120) {
-        issues.push({
-          type: "suggestion",
-          line: lineNumber,
-          message: "라인이 너무 깁니다",
-          suggestion: includeSuggestions
-            ? "라인을 분할하거나 변수명을 줄이세요"
-            : undefined,
-        });
-      }
-    });
-  }
-
-  private reviewPythonFile(
-    content: string,
-    filePath: string,
-    issues: CodeReviewResult["files"][0]["issues"],
-    includeSuggestions: boolean
-  ): void {
-    const lines = content.split("\n");
-
-    lines.forEach((line, index) => {
-      const lineNumber = index + 1;
-
-      // print 문 체크
-      if (line.includes("print(") && !line.includes("# TODO")) {
-        issues.push({
-          type: "warning",
-          line: lineNumber,
-          message: "프로덕션 코드에서 print 사용을 피하세요",
-          suggestion: includeSuggestions
-            ? "로깅 모듈 사용을 고려하세요"
-            : undefined,
-        });
-      }
-
-      // 긴 라인 체크 (PEP 8)
-      if (line.length > 88) {
-        issues.push({
-          type: "suggestion",
-          line: lineNumber,
-          message: "라인이 PEP 8 권장 길이(88자)를 초과합니다",
-          suggestion: includeSuggestions ? "라인을 분할하세요" : undefined,
-        });
-      }
-    });
-  }
-
-  private reviewJavaFile(
-    content: string,
-    filePath: string,
-    issues: CodeReviewResult["files"][0]["issues"],
-    includeSuggestions: boolean
-  ): void {
-    const lines = content.split("\n");
-
-    lines.forEach((line, index) => {
-      const lineNumber = index + 1;
-
-      // System.out.println 체크
-      if (line.includes("System.out.println") && !line.includes("// TODO")) {
-        issues.push({
-          type: "warning",
-          line: lineNumber,
-          message: "프로덕션 코드에서 System.out.println 사용을 피하세요",
-          suggestion: includeSuggestions
-            ? "로깅 프레임워크 사용을 고려하세요"
-            : undefined,
-        });
-      }
-
-      // 긴 라인 체크
-      if (line.length > 120) {
-        issues.push({
-          type: "suggestion",
-          line: lineNumber,
-          message: "라인이 너무 깁니다",
-          suggestion: includeSuggestions ? "라인을 분할하세요" : undefined,
-        });
-      }
-    });
-  }
-
-  private reviewGoFile(
-    content: string,
-    filePath: string,
-    issues: CodeReviewResult["files"][0]["issues"],
-    includeSuggestions: boolean
-  ): void {
-    const lines = content.split("\n");
-
-    lines.forEach((line, index) => {
-      const lineNumber = index + 1;
-
-      // fmt.Println 체크
-      if (line.includes("fmt.Println") && !line.includes("// TODO")) {
-        issues.push({
-          type: "warning",
-          line: lineNumber,
-          message: "프로덕션 코드에서 fmt.Println 사용을 피하세요",
-          suggestion: includeSuggestions
-            ? "log 패키지 사용을 고려하세요"
-            : undefined,
-        });
-      }
-
-      // 긴 라인 체크
-      if (line.length > 100) {
-        issues.push({
-          type: "suggestion",
-          line: lineNumber,
-          message: "라인이 너무 깁니다",
-          suggestion: includeSuggestions ? "라인을 분할하세요" : undefined,
-        });
-      }
-    });
   }
 
   private reviewGenericFile(
@@ -698,24 +610,24 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
     lines.forEach((line, index) => {
       const lineNumber = index + 1;
 
-      // 긴 라인 체크
+      // Check for long lines
       if (line.length > 120) {
         issues.push({
           type: "suggestion",
           line: lineNumber,
-          message: "라인이 너무 깁니다",
-          suggestion: includeSuggestions ? "라인을 분할하세요" : undefined,
+          message: "Line is too long",
+          suggestion: includeSuggestions ? "Split the line" : undefined,
         });
       }
 
-      // TODO/FIXME 체크
+      // Check for TODO/FIXME
       if (line.includes("TODO") || line.includes("FIXME")) {
         issues.push({
           type: "suggestion",
           line: lineNumber,
-          message: "TODO/FIXME 주석이 있습니다",
+          message: "TODO/FIXME comment found",
           suggestion: includeSuggestions
-            ? "이슈를 해결하거나 이슈 트래커에 등록하세요"
+            ? "Resolve the issue or register it in the issue tracker"
             : undefined,
         });
       }
@@ -773,9 +685,9 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
     );
 
     return (
-      `브랜치 '${gitStatus.branch}'에서 ${files.length}개 파일을 리뷰했습니다. ` +
-      `전체 점수: ${overallScore}/100. ` +
-      `발견된 이슈: ${totalIssues}개 (오류: ${errorCount}, 경고: ${warningCount})`
+      `Reviewed ${files.length} files in branch '${gitStatus.branch}'. ` +
+      `Overall score: ${overallScore}/100. ` +
+      `Issues found: ${totalIssues} (Errors: ${errorCount}, Warnings: ${warningCount})`
     );
   }
 
@@ -785,30 +697,30 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
   ): string[] {
     const recommendations: string[] = [];
 
-    // Git 상태 기반 권장사항
+    // Git status-based recommendations
     if (gitStatus.ahead > 0) {
       recommendations.push(
-        `로컬에 ${gitStatus.ahead}개의 커밋이 있습니다. 원격 저장소에 푸시를 고려하세요.`
+        `You have ${gitStatus.ahead} commits locally. Consider pushing to remote repository.`
       );
     }
 
     if (gitStatus.behind > 0) {
       recommendations.push(
-        `원격 저장소에 ${gitStatus.behind}개의 새로운 커밋이 있습니다. pull을 고려하세요.`
+        `Remote repository has ${gitStatus.behind} new commits. Consider pulling.`
       );
     }
 
     if (gitStatus.untracked.length > 0) {
       recommendations.push(
-        `${gitStatus.untracked.length}개의 추적되지 않는 파일이 있습니다. .gitignore에 추가하거나 커밋하세요.`
+        `${gitStatus.untracked.length} untracked files found. Add to .gitignore or commit them.`
       );
     }
 
-    // 코드 품질 기반 권장사항
+    // Code quality-based recommendations
     const lowScoreFiles = files.filter((file) => file.score < 70);
     if (lowScoreFiles.length > 0) {
       recommendations.push(
-        `${lowScoreFiles.length}개 파일의 점수가 낮습니다. 코드 품질 개선이 필요합니다.`
+        `${lowScoreFiles.length} files have low scores. Code quality improvement needed.`
       );
     }
 
@@ -817,15 +729,199 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
     );
     if (filesWithErrors.length > 0) {
       recommendations.push(
-        `${filesWithErrors.length}개 파일에 오류가 있습니다. 우선적으로 수정하세요.`
+        `${filesWithErrors.length} files have errors. Fix them as priority.`
       );
     }
 
     if (recommendations.length === 0) {
-      recommendations.push("코드 품질이 양호합니다!");
+      recommendations.push("Code quality is good!");
     }
 
     return recommendations;
+  }
+
+  // Check if Codex CLI is available
+  private async checkCodexAvailability(): Promise<boolean> {
+    try {
+      execSync("codex --version", { stdio: "pipe" });
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  // Perform Codex analysis on TypeScript code using Codex CLI
+  private async performCodexAnalysis(
+    content: string,
+    filePath: string
+  ): Promise<CodeReviewResult["files"][0]["codexAnalysis"]> {
+    const tempFile = join(process.cwd(), `temp_codex_${Date.now()}.ts`);
+
+    try {
+      // Write content to temporary file
+      writeFileSync(tempFile, content);
+
+      // Create Codex prompt
+      const prompt = this.buildCodexPrompt(filePath);
+
+      // Execute Codex CLI
+      const result = await this.executeCodexCLI(prompt, tempFile);
+
+      // Parse the result
+      return this.parseCodexResponse(result);
+    } finally {
+      // Clean up temporary file
+      try {
+        if (existsSync(tempFile)) {
+          unlinkSync(tempFile);
+        }
+      } catch (error) {
+        console.warn(`Failed to clean up temp file ${tempFile}:`, error);
+      }
+    }
+  }
+
+  // Execute Codex CLI with prompt
+  private async executeCodexCLI(
+    prompt: string,
+    filePath: string
+  ): Promise<string> {
+    return new Promise((resolve, reject) => {
+      try {
+        // Use execSync with proper argument handling
+        const output = execSync(`codex exec`, {
+          input: prompt,
+          cwd: process.cwd(),
+          encoding: "utf8",
+          timeout: 1200000, // 2 minute timeout
+          maxBuffer: 1024 * 1024, // 1MB buffer
+        });
+        resolve(output);
+      } catch (error) {
+        reject(
+          new Error(
+            `Codex CLI execution failed: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }`
+          )
+        );
+      }
+    });
+  }
+
+  // Build prompt for Codex analysis
+  private buildCodexPrompt(filePath: string): string {
+    return `Analyze this TypeScript file "${filePath}" and provide a brief code review focusing on security, performance, and logic issues. Format as JSON:
+{
+  "context": "What this code does",
+  "securityIssues": ["security concerns"],
+  "performanceIssues": ["performance concerns"], 
+  "architectureIssues": ["architecture concerns"],
+  "logicIssues": ["logic concerns"],
+  "suggestions": ["improvement suggestions"]
+}`;
+  }
+
+  // Parse Codex response
+  private parseCodexResponse(
+    response: string
+  ): CodeReviewResult["files"][0]["codexAnalysis"] {
+    try {
+      // Try to extract JSON from the response
+      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error("No JSON found in response");
+      }
+
+      const parsed = JSON.parse(jsonMatch[0]);
+
+      return {
+        context: parsed.context || "No context provided",
+        securityIssues: Array.isArray(parsed.securityIssues)
+          ? parsed.securityIssues
+          : [],
+        performanceIssues: Array.isArray(parsed.performanceIssues)
+          ? parsed.performanceIssues
+          : [],
+        architectureIssues: Array.isArray(parsed.architectureIssues)
+          ? parsed.architectureIssues
+          : [],
+        logicIssues: Array.isArray(parsed.logicIssues)
+          ? parsed.logicIssues
+          : [],
+        suggestions: Array.isArray(parsed.suggestions)
+          ? parsed.suggestions
+          : [],
+      };
+    } catch (error) {
+      // Fallback parsing if JSON parsing fails
+      return {
+        context: "Analysis completed but response format was unexpected",
+        securityIssues: [],
+        performanceIssues: [],
+        architectureIssues: [],
+        logicIssues: [],
+        suggestions: [response.substring(0, 500) + "..."],
+      };
+    }
+  }
+
+  // Convert Codex analysis to issues
+  private convertCodexAnalysisToIssues(
+    analysis: CodeReviewResult["files"][0]["codexAnalysis"],
+    issues: CodeReviewResult["files"][0]["issues"]
+  ): void {
+    if (!analysis) return;
+
+    // Security issues
+    analysis.securityIssues.forEach((issue) => {
+      issues.push({
+        type: "error",
+        message: `Security: ${issue}`,
+        category: "security",
+        suggestion: "Address this security concern immediately",
+      });
+    });
+
+    // Performance issues
+    analysis.performanceIssues.forEach((issue) => {
+      issues.push({
+        type: "warning",
+        message: `Performance: ${issue}`,
+        category: "performance",
+        suggestion: "Consider optimizing for better performance",
+      });
+    });
+
+    // Architecture issues
+    analysis.architectureIssues.forEach((issue) => {
+      issues.push({
+        type: "warning",
+        message: `Architecture: ${issue}`,
+        category: "architecture",
+        suggestion: "Review and improve the code structure",
+      });
+    });
+
+    // Logic issues
+    analysis.logicIssues.forEach((issue) => {
+      issues.push({
+        type: "error",
+        message: `Logic: ${issue}`,
+        category: "logic",
+        suggestion: "Review the logic and fix potential bugs",
+      });
+    });
+
+    // General suggestions
+    analysis.suggestions.forEach((suggestion) => {
+      issues.push({
+        type: "suggestion",
+        message: `Suggestion: ${suggestion}`,
+        category: "style",
+        suggestion: suggestion,
+      });
+    });
   }
 }
 
