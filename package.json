@@ -1,0 +1,38 @@
+{
+  "name": "codex-review-pipeline",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Automated code review pipeline using OpenAI Codex",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "node --loader ts-node/esm src/runReview.ts",
+    "review:staged": "node --loader ts-node/esm src/runReview.ts --staged",
+    "review:last": "node --loader ts-node/esm src/runReview.ts --last",
+    "review:file": "node --loader ts-node/esm src/runReview.ts --file",
+    "prepare": "husky install"
+  },
+  "keywords": [
+    "code-review",
+    "openai",
+    "codex",
+    "automation"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@openai/codex-sdk": "^0.47.0",
+    "zod": "^3.22.4",
+    "chalk": "^5.3.0",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3",
+    "ts-node": "^10.9.2",
+    "@types/node": "^20.10.5",
+    "husky": "^8.0.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
