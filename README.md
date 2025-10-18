@@ -1,6 +1,12 @@
 # my-mcp-server
 
-A Model Context Protocol (MCP) server built with mcp-framework.
+A Model Context Protocol (MCP) server built with [mcp-framework](https://github.com/QuantGeekDev/mcp-framework). This server provides powerful tools for code review, weather information, and general utilities.
+
+## Features
+
+- 🔍 **Codex Review Tool**: Git status analysis and automated code review
+- 🌤️ **Weather API Tool**: Real-time weather information for cities
+- 🛠️ **Example Tool**: General-purpose message processing
 
 ## Quick Start
 
@@ -11,6 +17,11 @@ npm install
 # Build the project
 npm run build
 
+# Link globally for testing
+npm link
+
+# Test the server
+my-mcp-server
 ```
 
 ## Project Structure
@@ -19,15 +30,61 @@ npm run build
 my-mcp-server/
 ├── src/
 │   ├── tools/        # MCP Tools
-│   │   └── ExampleTool.ts
+│   │   ├── CodexReviewTool.ts    # Git-based code review tool
+│   │   ├── WeatherTool.ts        # Weather API integration
+│   │   └── ExampleTool.ts        # Example tool
 │   └── index.ts      # Server entry point
+├── dist/             # Compiled JavaScript files
 ├── package.json
 └── tsconfig.json
 ```
 
+## Available Tools
+
+### 🔍 Codex Review Tool (`codex_review`)
+
+Performs automated code review based on Git status analysis.
+
+**Parameters:**
+
+- `repositoryPath` (optional): Path to the repository to review (default: current directory)
+- `reviewType` (optional): Type of review - "full", "staged", or "modified" (default: "modified")
+- `includeSuggestions` (optional): Include improvement suggestions (default: true)
+
+**Features:**
+
+- Git status analysis (branch, commits, staged/modified files)
+- Multi-language support (TypeScript, JavaScript, Python, Java, Go)
+- Code quality checks (type safety, logging, line length, TODO comments)
+- Scoring system (0-100 points per file)
+- Detailed recommendations
+
+### 🌤️ Weather API Tool (`weather_api`)
+
+Provides real-time weather information for cities using Open-Meteo API.
+
+**Parameters:**
+
+- `city`: City name to get weather information for
+
+**Features:**
+
+- Real-time weather data
+- Korean city name support
+- Temperature, humidity, wind speed, precipitation data
+- Weather condition descriptions
+
+### 🛠️ Example Tool (`example_tool`)
+
+A simple example tool for message processing.
+
+**Parameters:**
+
+- `message`: Message to process
+
 ## Adding Components
 
-The project comes with an example tool in `src/tools/ExampleTool.ts`. You can add more tools using the CLI:
+You can add more tools using the CLI:
 
 ```bash
 # Add a new tool
@@ -74,12 +131,14 @@ export default MyTool;
 ## Publishing to npm
 
 1. Update your package.json:
+
    - Ensure `name` is unique and follows npm naming conventions
    - Set appropriate `version`
    - Add `description`, `author`, `license`, etc.
    - Check `bin` points to the correct entry file
 
 2. Build and test locally:
+
    ```bash
    npm run build
    npm link
@@ -87,17 +146,20 @@ export default MyTool;
    ```
 
 3. Login to npm (create account if necessary):
+
    ```bash
    npm login
    ```
 
 4. Publish your package:
+
    ```bash
    npm publish
    ```
 
 After publishing, users can add it to their claude desktop client (read below) or run it with npx
-```
+
+````
 
 ## Using with Claude Desktop
 
@@ -112,8 +174,7 @@ Add this configuration to your Claude Desktop config file:
 {
   "mcpServers": {
     "my-mcp-server": {
-      "command": "node",
-      "args":["/absolute/path/to/my-mcp-server/dist/index.js"]
+      "command": "my-mcp-server"
     }
   }
 }
@@ -143,7 +204,40 @@ Add this configuration to your Claude Desktop config file:
 2. Run `npm run build` to compile
 3. The server will automatically load your tools on startup
 
+## Code Quality Scoring (Example MCP using Codex)
+
+The Codex Review Tool uses a comprehensive scoring system:
+
+- **Starting Score**: 100 points per file
+- **Error Issues**: -20 points each
+- **Warning Issues**: -10 points each
+- **Suggestion Issues**: -5 points each
+- **Minimum Score**: 0 points
+
+### Issue Types Detected
+
+**TypeScript/JavaScript:**
+- `any` type usage
+- `console.log` statements
+- Long lines (>120 characters)
+- TODO/FIXME comments
+- Function complexity
+
+**Python:**
+- `print()` statements
+- Long lines (>88 characters, PEP 8)
+
+**Java:**
+- `System.out.println` statements
+- Long lines (>120 characters)
+
+**Go:**
+- `fmt.Println` statements
+- Long lines (>100 characters)
+
 ## Learn More
 
-- [MCP Framework Github](https://github.com/QuantGeekDev/mcp-framework)
-- [MCP Framework Docs](https://mcp-framework.com)
+- [MCP Framework GitHub](https://github.com/QuantGeekDev/mcp-framework) - Core framework documentation
+- [MCP Framework Docs](https://mcp-framework.com) - Official documentation
+- [Model Context Protocol](https://modelcontextprotocol.io/) - MCP specification
+````
