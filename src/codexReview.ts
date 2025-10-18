@@ -1,57 +1,65 @@
-import { Codex } from "@openai/codex-sdk";
+import { execSync } from "node:child_process";
 import { ReviewResponseSchema, type ReviewResponse } from "./types.js";
-
-const SYSTEM_PROMPT = `
-You are a senior code reviewer. 
-Return STRICTLY a JSON object with shape:
-{
-  "summary": string,
-  "points": [
-    { "file": string, "line": number?, "severity": "info"|"minor"|"major"|"critical",
-      "title": string, "message": string, "suggestion": string? }
-  ]
-}
-Guidelines:
-- Review based ONLY on the provided unified diff (git-style).
-- Include file paths exactly as seen in the diff headers.
-- When possible, infer an approximate line for each point from the hunk.
-- Prefer actionable suggestions (snippets or concrete steps).
-- Be concise but specific.
-`;
 
 export async function reviewDiffWithCodex(
   diffText: string,
-  apiKey?: string
+  prompt?: string
 ): Promise<ReviewResponse> {
   if (!diffText || diffText.trim().length === 0) {
     return { summary: "No changes detected.", points: [] };
   }
 
-  const codex = new Codex({
-    apiKey: apiKey ?? process.env.OPENAI_API_KEY,
-  });
+  const reviewPrompt =
+    prompt ||
+    `
+Review the following code changes and provide structured feedback in JSON format:
 
-  const thread = codex.startThread();
-
-  const userPrompt = `${SYSTEM_PROMPT}
-
-Review the following unified diff and produce JSON:
 \`\`\`diff
 ${diffText}
-\`\`\``;
+\`\`\`
+
+Return a JSON object with this structure:
+{
+  "summary": "Brief summary of the review",
+  "points": [
+    {
+      "file": "filename",
+      "line": 42,
+      "severity": "info|minor|major|critical",
+      "title": "Issue title",
+      "message": "Detailed description",
+      "suggestion": "How to fix it"
+    }
+  ]
+}
+`;
 
   try {
-    const result = await thread.run(userPrompt);
+    // Use Codex CLI to review the diff
+    const result = execSync(`codex exec "${reviewPrompt}"`, {
+      encoding: "utf-8",
+      stdio: "pipe",
+      timeout: 60000, // 60초 타임아웃
+    });
 
-    const text = result.finalResponse;
-    const match = text.match(/\{[\s\S]*\}$/m);
-    const jsonStr = match ? match[0] : text;
+    // Extract JSON from the response
+    const jsonMatch = result.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      return {
+        summary: "Codex response did not contain valid JSON",
+        points: [],
+      };
+    }
 
-    const parsed = JSON.parse(jsonStr);
+    const parsed = JSON.parse(jsonMatch[0]);
     const validated = ReviewResponseSchema.parse(parsed);
     return validated;
   } catch (error) {
-    console.error("Codex API error:", error);
-    return { summary: "Failed to get review from Codex API.", points: [] };
+    console.error("Codex CLI error:", error);
+    return {
+      summary:
+        "Failed to get review from Codex CLI. Make sure @openai/codex is installed globally.",
+      points: [],
+    };
   }
 }

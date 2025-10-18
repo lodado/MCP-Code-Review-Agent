@@ -14,19 +14,20 @@
 
 - Node.js 18+
 - Git 저장소
-- OpenAI API Key
+- Codex CLI (`npm install -g @openai/codex`)
 
 ## 🛠 설치
 
-1. 의존성 설치:
+1. Codex CLI 설치:
+
 ```bash
-npm install
+npm install -g @openai/codex
 ```
 
-2. 환경 변수 설정:
+2. 의존성 설치:
+
 ```bash
-cp .env.example .env
-# .env 파일에서 OPENAI_API_KEY를 실제 키로 변경
+npm install
 ```
 
 ## 🎯 사용법
@@ -124,10 +125,12 @@ npx husky add .husky/pre-commit "npm run review:staged"
 ## 💡 베스트 프랙티스
 
 ### 비용 최적화
+
 - 큰 diff는 파일 단위로 분할하여 리뷰
 - 불필요한 파일 변경사항 제외
 
 ### 시스템 프롬프트 커스터마이징
+
 `src/codexReview.ts`의 `SYSTEM_PROMPT`에 사내 코딩 규칙 추가:
 
 ```typescript
@@ -143,6 +146,7 @@ Additional guidelines:
 ```
 
 ### 민감한 파일 필터링
+
 보안상 민감한 파일은 리뷰에서 제외:
 
 ```bash
