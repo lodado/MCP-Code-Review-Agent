@@ -1,5 +1,6 @@
 import { MCPTool } from "mcp-framework";
 import { z } from "zod";
+import { Codex } from "@openai/codex-sdk";
 import { execSync } from "child_process";
 import {
   readFileSync,
@@ -48,10 +49,16 @@ interface CodeReviewResult {
 class CodexReviewTool extends MCPTool<CodexReviewInput> {
   name = "codex_review";
   description =
-    "Performs intelligent code review using Codex CLI for TypeScript files";
+    "Performs intelligent code review using OpenAI Codex SDK for TypeScript files";
 
-  // Codex CLI availability check
+  // Codex SDK instance
+  private codex: Codex;
   private codexAvailable: boolean = false;
+
+  constructor() {
+    super();
+    this.codex = new Codex();
+  }
 
   // Maximum file size (50KB for better analysis quality)
   private readonly MAX_FILE_SIZE = 50 * 1024;
@@ -217,33 +224,36 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
     }
   }
 
-  schema = {
-    repositoryPath: {
-      type: z.string().optional(),
-      description: "Repository path to review (default: current directory)",
-    },
-    reviewType: {
-      type: z.enum(["full", "staged", "modified"]).optional(),
-      description:
-        "Review type: full(all), staged(staged files), modified(modified files)",
-    },
-    includeSuggestions: {
-      type: z.boolean().optional(),
-      description: "Whether to include improvement suggestions",
-    },
-    useCodex: {
-      type: z.boolean().optional(),
-      description: "Whether to use Codex AI for intelligent code review",
-    },
-  };
+  schema = z.object({
+    repositoryPath: z
+      .string()
+      .optional()
+      .describe("Repository path to review (default: current directory)"),
+    reviewType: z
+      .enum(["full", "staged", "modified"])
+      .optional()
+      .describe(
+        "Review type: full(all), staged(staged files), modified(modified files)"
+      ),
+    includeSuggestions: z
+      .boolean()
+      .optional()
+      .describe("Whether to include improvement suggestions"),
+    useCodex: z
+      .boolean()
+      .optional()
+      .describe("Whether to use Codex AI for intelligent code review"),
+  });
 
   async execute(input: CodexReviewInput): Promise<string> {
     const {
-      repositoryPath = process.cwd(),
-      reviewType = "modified",
-      includeSuggestions = true,
-      useCodex = true,
+      repositoryPath = process.env.DEFAULT_REPO_PATH || process.cwd(),
+      reviewType = (process.env.DEFAULT_REVIEW_TYPE as "full" | "staged" | "modified") || "modified",
+      includeSuggestions = process.env.DEFAULT_INCLUDE_SUGGESTIONS === "true",
+      useCodex = process.env.DEFAULT_USE_CODEX === "true",
     } = input;
+
+    console.log("test", input);
 
     try {
       // Security: Input validation
@@ -273,6 +283,7 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
         }
       }
 
+      console.log("Analyzing Git status...");
       // Analyze Git status
       const gitStatus = await this.analyzeGitStatus(repositoryPath);
 
@@ -550,17 +561,23 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
     return summary;
   }
 
-  // Check if Codex CLI is available
+  // Check if Codex SDK is available
   private async checkCodexAvailability(): Promise<boolean> {
     try {
-      execSync("codex --version", { stdio: "pipe" });
-      return true;
+      // Test Codex SDK by starting a simple thread
+      const thread = this.codex.startThread();
+      const turn = await thread.run("Hello, are you working?");
+
+      this.codexAvailable = turn.finalResponse !== undefined;
+      return this.codexAvailable;
     } catch (error) {
+      console.warn("Codex SDK availability check failed:", error);
+      this.codexAvailable = false;
       return false;
     }
   }
 
-  // Perform Codex analysis on TypeScript code using Codex CLI
+  // Perform Codex analysis on TypeScript code using Codex SDK
   private async performCodexAnalysis(
     content: string,
     filePath: string,
@@ -574,11 +591,15 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
         includeSuggestions
       );
 
-      // Execute Codex CLI
-      const result = await this.executeCodexCLI(prompt, filePath);
+      // Execute Codex SDK
+      const thread = this.codex.startThread();
+      const turn = await thread.run(prompt);
 
       // Parse the result
-      return this.parseCodexResponse(result, includeSuggestions);
+      return this.parseCodexResponse(
+        turn.finalResponse || "",
+        includeSuggestions
+      );
     } catch (error) {
       throw new Error(
         `Codex analysis failed: ${
@@ -586,34 +607,6 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
         }`
       );
     }
-  }
-
-  // Execute Codex CLI with prompt
-  private async executeCodexCLI(
-    prompt: string,
-    filePath: string
-  ): Promise<string> {
-    return new Promise((resolve, reject) => {
-      try {
-        // Use execSync with proper argument handling
-        const output = execSync(`codex exec`, {
-          input: prompt,
-          cwd: process.cwd(),
-          encoding: "utf8",
-          timeout: 1200000, // 2 minute timeout
-          maxBuffer: 1024 * 1024, // 1MB buffer
-        });
-        resolve(output);
-      } catch (error) {
-        reject(
-          new Error(
-            `Codex CLI execution failed: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`
-          )
-        );
-      }
-    });
   }
 
   // Build prompt for Codex analysis
