@@ -1,14 +1,13 @@
 import { MCPTool } from "mcp-framework";
 import { z } from "zod";
-import { execSync, spawn } from "child_process";
+import { execSync } from "child_process";
 import {
   readFileSync,
   existsSync,
   accessSync,
   constants,
   statSync,
-  writeFileSync,
-  unlinkSync,
+  realpathSync,
 } from "fs";
 import { join, resolve, normalize, relative } from "path";
 
@@ -63,10 +62,7 @@ interface CodeReviewResult {
 class CodexReviewTool extends MCPTool<CodexReviewInput> {
   name = "codex_review";
   description =
-    "Analyzes Git status to perform code review and suggest improvements using both static analysis and Codex AI";
-
-  // Allowed file extensions list (TypeScript only)
-  private readonly ALLOWED_EXTENSIONS = ["ts", "tsx"];
+    "Analyzes Git status to perform intelligent code review using Codex CLI for TypeScript files";
 
   // Codex CLI availability check
   private codexAvailable: boolean = false;
@@ -89,13 +85,21 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
     // Convert to absolute path
     const absolutePath = resolve(basePath, normalizedPath);
 
-    // Prevent path traversal attacks: check if path goes outside basePath
-    const relativePath = relative(basePath, absolutePath);
+    // Resolve symlinks to prevent symlink traversal attacks
+    let realPath: string;
+    try {
+      realPath = realpathSync(absolutePath);
+    } catch (error) {
+      throw new Error("Path resolution failed");
+    }
+
+    // Prevent path traversal attacks: check if resolved path goes outside basePath
+    const relativePath = relative(basePath, realPath);
     if (relativePath.startsWith("..") || relativePath.includes("..")) {
       throw new Error("Path traversal not allowed");
     }
 
-    return absolutePath;
+    return realPath;
   }
 
   // Security: File access permission check
@@ -119,12 +123,6 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
     } catch (error) {
       return false;
     }
-  }
-
-  // Security: File extension validation
-  private validateFileExtension(filePath: string): boolean {
-    const extension = filePath.split(".").pop()?.toLowerCase();
-    return extension ? this.ALLOWED_EXTENSIONS.includes(extension) : false;
   }
 
   // Security: Safe Git command execution
@@ -205,8 +203,8 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
       if (useCodex) {
         this.codexAvailable = await this.checkCodexAvailability();
         if (!this.codexAvailable) {
-          console.warn(
-            "Codex CLI not available. Falling back to static analysis only."
+          throw new Error(
+            "Codex CLI is required but not available. Please install and authenticate Codex CLI."
           );
         }
       }
@@ -350,12 +348,20 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
         "git branch --show-current",
         repoPath
       ).trim();
-      const aheadBehindOutput = this.safeExecGitCommand(
-        "git rev-list --left-right --count HEAD@{upstream}...HEAD",
-        repoPath
-      ).trim();
+      let ahead = 0;
+      let behind = 0;
 
-      const [ahead, behind] = aheadBehindOutput.split("\t").map(Number);
+      try {
+        const aheadBehindOutput = this.safeExecGitCommand(
+          "git rev-list --left-right --count HEAD@{upstream}...HEAD",
+          repoPath
+        ).trim();
+        [behind, ahead] = aheadBehindOutput.split("\t").map(Number);
+      } catch (error) {
+        // No upstream branch configured, default to 0/0
+        ahead = 0;
+        behind = 0;
+      }
 
       const staged: string[] = [];
       const modified: string[] = [];
@@ -363,21 +369,41 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
       const deleted: string[] = [];
 
       gitStatusOutput.split("\n").forEach((line) => {
-        if (!line.trim()) return;
+        const trimmedLine = line.trim();
+        if (!trimmedLine) return;
 
-        const status = line.substring(0, 2);
-        const filePath = line.substring(3);
+        const status = trimmedLine.substring(0, 2);
+        let filePath = trimmedLine.substring(3);
 
-        if (status.includes("A") || status.includes("M")) {
+        // Handle rename entries (e.g., "R  old.ts -> new.ts")
+        if (filePath.includes(" -> ")) {
+          filePath = filePath.split(" -> ")[1];
+        }
+
+        const stagedStatus = status[0]; // First column (staged area)
+        const workingStatus = status[1]; // Second column (working directory)
+
+        // Staged files (first column)
+        if (
+          stagedStatus === "A" ||
+          stagedStatus === "M" ||
+          stagedStatus === "R"
+        ) {
           staged.push(filePath);
         }
-        if (status.includes("M") && !status.includes("A")) {
+
+        // Modified files (second column, not staged)
+        if (workingStatus === "M" && stagedStatus !== "M") {
           modified.push(filePath);
         }
-        if (status.includes("?")) {
+
+        // Untracked files
+        if (stagedStatus === "?" && workingStatus === "?") {
           untracked.push(filePath);
         }
-        if (status.includes("D")) {
+
+        // Deleted files
+        if (stagedStatus === "D" || workingStatus === "D") {
           deleted.push(filePath);
         }
       });
@@ -431,18 +457,19 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
         validatedRepoPath
       );
 
-      // Security: File extension validation
-      if (!this.validateFileExtension(filePath)) {
+      // Only process TypeScript files
+      const extension = filePath.split(".").pop()?.toLowerCase();
+      if (extension !== "ts" && extension !== "tsx") {
         return {
           path: filePath,
           status: "skipped",
           issues: [
             {
               type: "warning",
-              message: "Unsupported file format",
+              message: "Only TypeScript files (.ts, .tsx) are supported",
             },
           ],
-          score: 0,
+          score: 100, // Don't penalize skipped files
         };
       }
 
@@ -464,35 +491,19 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
       const content = readFileSync(validatedFilePath, "utf8");
       const issues: CodeReviewResult["files"][0]["issues"] = [];
 
-      // Review TypeScript files only
-      const extension = filePath.split(".").pop()?.toLowerCase();
-
-      if (extension === "ts" || extension === "tsx") {
-        this.reviewTypeScriptFile(
-          content,
-          filePath,
-          issues,
-          includeSuggestions
-        );
-      } else {
-        // For non-TypeScript files, just do basic checks
-        this.reviewGenericFile(content, filePath, issues, includeSuggestions);
-      }
-
-      // Perform Codex analysis if enabled
+      // Perform Codex analysis
       let codexAnalysis:
         | CodeReviewResult["files"][0]["codexAnalysis"]
         | undefined;
-      if (
-        useCodex &&
-        this.codexAvailable &&
-        (extension === "ts" || extension === "tsx")
-      ) {
+
+      if (useCodex && this.codexAvailable) {
         try {
           codexAnalysis = await this.performCodexAnalysis(content, filePath);
 
-          // Convert Codex analysis to issues
-          this.convertCodexAnalysisToIssues(codexAnalysis, issues);
+          // Convert Codex analysis to issues only if suggestions are enabled
+          if (includeSuggestions) {
+            this.convertCodexAnalysisToIssues(codexAnalysis, issues);
+          }
         } catch (error) {
           console.warn(`Codex analysis failed for ${filePath}:`, error);
         }
@@ -523,117 +534,6 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
     }
   }
 
-  private reviewTypeScriptFile(
-    content: string,
-    filePath: string,
-    issues: CodeReviewResult["files"][0]["issues"],
-    includeSuggestions: boolean
-  ): void {
-    const lines = content.split("\n");
-
-    // Basic TypeScript review rules
-    lines.forEach((line, index) => {
-      const lineNumber = index + 1;
-
-      // Check for any type usage
-      if (line.includes(": any") && !line.includes("// eslint-disable")) {
-        issues.push({
-          type: "warning",
-          line: lineNumber,
-          message: "Avoid using any type",
-          suggestion: includeSuggestions
-            ? "Define specific types or use unknown"
-            : undefined,
-        });
-      }
-
-      // Check for console.log
-      if (line.includes("console.log") && !line.includes("// TODO")) {
-        issues.push({
-          type: "warning",
-          line: lineNumber,
-          message: "Avoid console.log in production code",
-          suggestion: includeSuggestions
-            ? "Consider using a logging library"
-            : undefined,
-        });
-      }
-
-      // Check for long lines
-      if (line.length > 120) {
-        issues.push({
-          type: "suggestion",
-          line: lineNumber,
-          message: "Line is too long",
-          suggestion: includeSuggestions
-            ? "Split the line or shorten variable names"
-            : undefined,
-        });
-      }
-
-      // Check for TODO/FIXME
-      if (line.includes("TODO") || line.includes("FIXME")) {
-        issues.push({
-          type: "suggestion",
-          line: lineNumber,
-          message: "TODO/FIXME comment found",
-          suggestion: includeSuggestions
-            ? "Resolve the issue or register it in the issue tracker"
-            : undefined,
-        });
-      }
-    });
-
-    // Check function complexity
-    const functionMatches = content.match(
-      /function\s+\w+|const\s+\w+\s*=\s*\(/g
-    );
-    if (functionMatches && functionMatches.length > 10) {
-      issues.push({
-        type: "suggestion",
-        message: "Too many functions in file",
-        suggestion: includeSuggestions
-          ? "Consider splitting the file into multiple files"
-          : undefined,
-      });
-    }
-  }
-
-  private reviewGenericFile(
-    content: string,
-    filePath: string,
-    issues: CodeReviewResult["files"][0]["issues"],
-    includeSuggestions: boolean
-  ): void {
-    const lines = content.split("\n");
-
-    lines.forEach((line, index) => {
-      const lineNumber = index + 1;
-
-      // Check for long lines
-      if (line.length > 120) {
-        issues.push({
-          type: "suggestion",
-          line: lineNumber,
-          message: "Line is too long",
-          suggestion: includeSuggestions ? "Split the line" : undefined,
-        });
-      }
-
-      // Check for TODO/FIXME
-      if (line.includes("TODO") || line.includes("FIXME")) {
-        issues.push({
-          type: "suggestion",
-          line: lineNumber,
-          message: "TODO/FIXME comment found",
-          suggestion: includeSuggestions
-            ? "Resolve the issue or register it in the issue tracker"
-            : undefined,
-        });
-      }
-    });
-  }
-
   private calculateFileScore(
     issues: CodeReviewResult["files"][0]["issues"]
   ): number {
@@ -660,8 +560,15 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
   private calculateOverallScore(files: CodeReviewResult["files"]): number {
     if (files.length === 0) return 100;
 
-    const totalScore = files.reduce((sum, file) => sum + file.score, 0);
-    return Math.round(totalScore / files.length);
+    // Only include non-skipped files in score calculation
+    const reviewableFiles = files.filter((file) => file.status !== "skipped");
+    if (reviewableFiles.length === 0) return 100;
+
+    const totalScore = reviewableFiles.reduce(
+      (sum, file) => sum + file.score,
+      0
+    );
+    return Math.round(totalScore / reviewableFiles.length);
   }
 
   private generateSummary(
@@ -755,29 +662,21 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
     content: string,
     filePath: string
   ): Promise<CodeReviewResult["files"][0]["codexAnalysis"]> {
-    const tempFile = join(process.cwd(), `temp_codex_${Date.now()}.ts`);
-
     try {
-      // Write content to temporary file
-      writeFileSync(tempFile, content);
-
-      // Create Codex prompt
-      const prompt = this.buildCodexPrompt(filePath);
+      // Create Codex prompt with file content
+      const prompt = this.buildCodexPrompt(filePath, content);
 
       // Execute Codex CLI
-      const result = await this.executeCodexCLI(prompt, tempFile);
+      const result = await this.executeCodexCLI(prompt, filePath);
 
       // Parse the result
       return this.parseCodexResponse(result);
-    } finally {
-      // Clean up temporary file
-      try {
-        if (existsSync(tempFile)) {
-          unlinkSync(tempFile);
-        }
-      } catch (error) {
-        console.warn(`Failed to clean up temp file ${tempFile}:`, error);
-      }
+    } catch (error) {
+      throw new Error(
+        `Codex analysis failed: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
     }
   }
 
@@ -810,60 +709,51 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
   }
 
   // Build prompt for Codex analysis
-  private buildCodexPrompt(filePath: string): string {
-    return `Analyze this TypeScript file "${filePath}" and provide a brief code review focusing on security, performance, and logic issues. Format as JSON:
-{
-  "context": "What this code does",
-  "securityIssues": ["security concerns"],
-  "performanceIssues": ["performance concerns"], 
-  "architectureIssues": ["architecture concerns"],
-  "logicIssues": ["logic concerns"],
-  "suggestions": ["improvement suggestions"]
-}`;
+  private buildCodexPrompt(filePath: string, content: string): string {
+    return `Analyze the following TypeScript code and provide a comprehensive code review focusing on:
+
+1. **Context**: What does this code do?
+2. **Security Issues**: Any security vulnerabilities or concerns
+3. **Performance Issues**: Performance bottlenecks or inefficiencies  
+4. **Architecture Issues**: Design patterns, coupling, separation of concerns
+5. **Logic Issues**: Potential bugs, edge cases, logical errors
+6. **Suggestions**: Specific improvement recommendations
+
+File: ${filePath}
+
+\`\`\`typescript
+${content}
+\`\`\`
+
+Provide detailed analysis with specific examples from the code.`;
   }
 
   // Parse Codex response
   private parseCodexResponse(
     response: string
   ): CodeReviewResult["files"][0]["codexAnalysis"] {
-    try {
-      // Try to extract JSON from the response
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        throw new Error("No JSON found in response");
-      }
+    // Extract the actual analysis content (remove Codex CLI headers)
+    const lines = response.split("\n");
+    const analysisStart = lines.findIndex(
+      (line) => line.includes("codex") && !line.includes("OpenAI Codex v")
+    );
 
-      const parsed = JSON.parse(jsonMatch[0]);
-
-      return {
-        context: parsed.context || "No context provided",
-        securityIssues: Array.isArray(parsed.securityIssues)
-          ? parsed.securityIssues
-          : [],
-        performanceIssues: Array.isArray(parsed.performanceIssues)
-          ? parsed.performanceIssues
-          : [],
-        architectureIssues: Array.isArray(parsed.architectureIssues)
-          ? parsed.architectureIssues
-          : [],
-        logicIssues: Array.isArray(parsed.logicIssues)
-          ? parsed.logicIssues
-          : [],
-        suggestions: Array.isArray(parsed.suggestions)
-          ? parsed.suggestions
-          : [],
-      };
-    } catch (error) {
-      // Fallback parsing if JSON parsing fails
-      return {
-        context: "Analysis completed but response format was unexpected",
-        securityIssues: [],
-        performanceIssues: [],
-        architectureIssues: [],
-        logicIssues: [],
-        suggestions: [response.substring(0, 500) + "..."],
-      };
+    let analysisContent = response;
+    if (analysisStart !== -1) {
+      analysisContent = lines
+        .slice(analysisStart + 1)
+        .join("\n")
+        .trim();
     }
+
+    return {
+      context: analysisContent,
+      securityIssues: [],
+      performanceIssues: [],
+      architectureIssues: [],
+      logicIssues: [],
+      suggestions: [],
+    };
   }
 
   // Convert Codex analysis to issues
@@ -873,54 +763,12 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
   ): void {
     if (!analysis) return;
 
-    // Security issues
-    analysis.securityIssues.forEach((issue) => {
-      issues.push({
-        type: "error",
-        message: `Security: ${issue}`,
-        category: "security",
-        suggestion: "Address this security concern immediately",
-      });
-    });
-
-    // Performance issues
-    analysis.performanceIssues.forEach((issue) => {
-      issues.push({
-        type: "warning",
-        message: `Performance: ${issue}`,
-        category: "performance",
-        suggestion: "Consider optimizing for better performance",
-      });
-    });
-
-    // Architecture issues
-    analysis.architectureIssues.forEach((issue) => {
-      issues.push({
-        type: "warning",
-        message: `Architecture: ${issue}`,
-        category: "architecture",
-        suggestion: "Review and improve the code structure",
-      });
-    });
-
-    // Logic issues
-    analysis.logicIssues.forEach((issue) => {
-      issues.push({
-        type: "error",
-        message: `Logic: ${issue}`,
-        category: "logic",
-        suggestion: "Review the logic and fix potential bugs",
-      });
-    });
-
-    // General suggestions
-    analysis.suggestions.forEach((suggestion) => {
-      issues.push({
-        type: "suggestion",
-        message: `Suggestion: ${suggestion}`,
-        category: "style",
-        suggestion: suggestion,
-      });
+    // Add the natural language analysis as a single comprehensive issue
+    issues.push({
+      type: "suggestion",
+      message: "Codex Analysis",
+      category: "style",
+      suggestion: analysis.context,
     });
   }
 }

@@ -1,16 +1,17 @@
 {
-  "name": "my-mcp-server",
-  "version": "0.0.2",
-  "description": "my-mcp-server MCP server",
+  "name": "@lodado/mcp-lists",
+  "version": "0.0.3",
+  "description": "@lodado/mcp-lists MCP server",
   "type": "module",
   "bin": {
-    "my-mcp-server": "./dist/index.js"
+    "mcp-lists": "./dist/index.js"
   },
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "tsc && mcp-build",
+    "prebuild": "rmdir /s /q dist 2>nul",
+    "build": "tsc && mcp-build && npm link",
     "watch": "tsc --watch",
     "start": "node dist/index.js",
     "test": "jest",
@@ -19,7 +20,7 @@
   },
   "dependencies": {
     "axios": "^1.12.2",
-    "mcp-framework": "^0.2.2"
+    "mcp-framework": "^0.2.15"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",
