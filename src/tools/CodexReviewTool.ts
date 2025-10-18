@@ -9,7 +9,7 @@ import {
   statSync,
   realpathSync,
 } from "fs";
-import { join, resolve, normalize, relative } from "path";
+import { resolve, normalize, relative } from "path";
 
 interface CodexReviewInput {
   repositoryPath?: string;
@@ -33,19 +33,7 @@ interface CodeReviewResult {
   files: Array<{
     path: string;
     status: string;
-    issues: Array<{
-      type: "error" | "warning" | "suggestion";
-      line?: number;
-      message: string;
-      suggestion?: string;
-      category?:
-        | "security"
-        | "performance"
-        | "architecture"
-        | "logic"
-        | "style";
-    }>;
-    score: number;
+    reason?: string;
     codexAnalysis?: {
       context: string;
       securityIssues: string[];
@@ -55,20 +43,25 @@ interface CodeReviewResult {
       suggestions: string[];
     };
   }>;
-  overallScore: number;
-  recommendations: string[];
 }
 
 class CodexReviewTool extends MCPTool<CodexReviewInput> {
   name = "codex_review";
   description =
-    "Analyzes Git status to perform intelligent code review using Codex CLI for TypeScript files";
+    "Performs intelligent code review using Codex CLI for TypeScript files";
 
   // Codex CLI availability check
   private codexAvailable: boolean = false;
 
-  // Maximum file size (1MB)
-  private readonly MAX_FILE_SIZE = 1024 * 1024;
+  // Maximum file size (50KB for better analysis quality)
+  private readonly MAX_FILE_SIZE = 50 * 1024;
+
+  // Maximum lines for analysis (500 lines)
+  private readonly MAX_LINES = 2500;
+
+  // Maximum functions/classes for analysis
+  private readonly MAX_FUNCTIONS = 50;
+  private readonly MAX_CLASSES = 10;
 
   // Security: Path validation and normalization
   private validateAndNormalizePath(
@@ -95,7 +88,9 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
 
     // Prevent path traversal attacks: check if resolved path goes outside basePath
     const relativePath = relative(basePath, realPath);
-    if (relativePath.startsWith("..") || relativePath.includes("..")) {
+    // Check for actual path traversal by examining path segments
+    const pathSegments = relativePath.split(/[/\\]/);
+    if (pathSegments.includes("..")) {
       throw new Error("Path traversal not allowed");
     }
 
@@ -123,6 +118,75 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
     } catch (error) {
       return false;
     }
+  }
+
+  // Check if file is suitable for analysis
+  private isFileSuitableForAnalysis(
+    filePath: string,
+    content: string
+  ): { suitable: boolean; reason?: string } {
+    // Check file extension
+    const extension = filePath.split(".").pop()?.toLowerCase();
+    if (extension !== "ts" && extension !== "tsx") {
+      return {
+        suitable: false,
+        reason: "Only TypeScript files (.ts, .tsx) are supported",
+      };
+    }
+
+    // Check file size
+    if (content.length > this.MAX_FILE_SIZE) {
+      return {
+        suitable: false,
+        reason: `File too large (${Math.round(
+          content.length / 1024
+        )}KB > ${Math.round(this.MAX_FILE_SIZE / 1024)}KB)`,
+      };
+    }
+
+    // Check line count
+    const lines = content.split("\n");
+    if (lines.length > this.MAX_LINES) {
+      return {
+        suitable: false,
+        reason: `Too many lines (${lines.length} > ${this.MAX_LINES})`,
+      };
+    }
+
+    // Check complexity (simple heuristics)
+    const functionCount = (
+      content.match(/function\s+\w+|const\s+\w+\s*=\s*\(/g) || []
+    ).length;
+    const classCount = (content.match(/class\s+\w+/g) || []).length;
+
+    if (functionCount > this.MAX_FUNCTIONS) {
+      return {
+        suitable: false,
+        reason: `Too many functions (${functionCount} > ${this.MAX_FUNCTIONS})`,
+      };
+    }
+
+    if (classCount > this.MAX_CLASSES) {
+      return {
+        suitable: false,
+        reason: `Too many classes (${classCount} > ${this.MAX_CLASSES})`,
+      };
+    }
+
+    // Skip test files and type definition files
+    const fileName = filePath.toLowerCase();
+    if (
+      fileName.includes(".test.") ||
+      fileName.includes(".spec.") ||
+      fileName.includes(".d.ts")
+    ) {
+      return {
+        suitable: false,
+        reason: "Test files and type definitions are skipped",
+      };
+    }
+
+    return { suitable: true };
   }
 
   // Security: Safe Git command execution
@@ -232,20 +296,9 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
         reviewResults.push(review);
       }
 
-      // Calculate overall score
-      const overallScore = this.calculateOverallScore(reviewResults);
-
-      // Generate recommendations
-      const recommendations = this.generateRecommendations(
-        reviewResults,
-        gitStatus
-      );
-
       const result: CodeReviewResult = {
-        summary: this.generateSummary(gitStatus, reviewResults, overallScore),
+        summary: this.generateSummary(gitStatus, reviewResults),
         files: reviewResults,
-        overallScore,
-        recommendations,
       };
 
       // Return results in readable string format
@@ -254,65 +307,22 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
       output += `📋 ${result.summary}\n\n`;
 
       if (result.files.length > 0) {
-        output += `📁 Detailed Results by File:\n`;
+        output += `📁 Codex Analysis Results:\n`;
         output += `-`.repeat(50) + `\n`;
 
         result.files.forEach((file, index) => {
-          output += `${index + 1}. ${file.path} (Score: ${file.score}/100)\n`;
+          output += `${index + 1}. ${file.path}\n`;
 
           // Show Codex analysis context if available
           if (file.codexAnalysis?.context) {
-            output += `   🧠 Context: ${file.codexAnalysis.context}\n`;
-          }
-
-          if (file.issues.length > 0) {
-            // Group issues by category
-            const issuesByCategory = file.issues.reduce((acc, issue) => {
-              const category = issue.category || "general";
-              if (!acc[category]) acc[category] = [];
-              acc[category].push(issue);
-              return acc;
-            }, {} as Record<string, typeof file.issues>);
-
-            Object.entries(issuesByCategory).forEach(([category, issues]) => {
-              const categoryIcon =
-                {
-                  security: "🔒",
-                  performance: "⚡",
-                  architecture: "🏗️",
-                  logic: "🧩",
-                  style: "🎨",
-                  general: "📝",
-                }[category] || "📝";
-
-              output += `   ${categoryIcon} ${category.toUpperCase()}:\n`;
-
-              issues.forEach((issue) => {
-                const icon =
-                  issue.type === "error"
-                    ? "❌"
-                    : issue.type === "warning"
-                    ? "⚠️"
-                    : "💡";
-                const lineInfo = issue.line ? ` (Line ${issue.line})` : "";
-                output += `      ${icon} ${issue.message}${lineInfo}\n`;
-                if (issue.suggestion) {
-                  output += `         💭 Suggestion: ${issue.suggestion}\n`;
-                }
-              });
-            });
+            output += `   🧠 Codex Analysis:\n`;
+            output += `   ${file.codexAnalysis.context}\n`;
+          } else if (file.status === "skipped" && file.reason) {
+            output += `   ⚠️ Skipped: ${file.reason}\n`;
           } else {
-            output += `   ✅ No issues\n`;
+            output += `   ⚠️ No Codex analysis available\n`;
           }
           output += `\n`;
-        });
-      }
-
-      if (result.recommendations.length > 0) {
-        output += `💡 Recommendations:\n`;
-        output += `-`.repeat(50) + `\n`;
-        result.recommendations.forEach((rec, index) => {
-          output += `${index + 1}. ${rec}\n`;
         });
       }
 
@@ -372,8 +382,13 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
         const trimmedLine = line.trim();
         if (!trimmedLine) return;
 
+        // Git status format: "XY filename" where XY is 2-char status
+        // Find the first space after the status to get filename
+        const spaceIndex = trimmedLine.indexOf(" ", 2);
+        if (spaceIndex === -1) return;
+
         const status = trimmedLine.substring(0, 2);
-        let filePath = trimmedLine.substring(3);
+        let filePath = trimmedLine.substring(spaceIndex + 1);
 
         // Handle rename entries (e.g., "R  old.ts -> new.ts")
         if (filePath.includes(" -> ")) {
@@ -392,8 +407,8 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
           staged.push(filePath);
         }
 
-        // Modified files (second column, not staged)
-        if (workingStatus === "M" && stagedStatus !== "M") {
+        // Modified files (second column, including MM status)
+        if (workingStatus === "M") {
           modified.push(filePath);
         }
 
@@ -457,39 +472,28 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
         validatedRepoPath
       );
 
-      // Only process TypeScript files
-      const extension = filePath.split(".").pop()?.toLowerCase();
-      if (extension !== "ts" && extension !== "tsx") {
-        return {
-          path: filePath,
-          status: "skipped",
-          issues: [
-            {
-              type: "warning",
-              message: "Only TypeScript files (.ts, .tsx) are supported",
-            },
-          ],
-          score: 100, // Don't penalize skipped files
-        };
-      }
-
       // Security: File access permission check
       if (!this.validateFileAccess(validatedFilePath)) {
         return {
           path: filePath,
           status: "inaccessible",
-          issues: [
-            {
-              type: "error",
-              message: "Cannot access file",
-            },
-          ],
-          score: 0,
         };
       }
 
       const content = readFileSync(validatedFilePath, "utf8");
-      const issues: CodeReviewResult["files"][0]["issues"] = [];
+
+      // Check if file is suitable for analysis
+      const suitabilityCheck = this.isFileSuitableForAnalysis(
+        filePath,
+        content
+      );
+      if (!suitabilityCheck.suitable) {
+        return {
+          path: filePath,
+          status: "skipped",
+          reason: suitabilityCheck.reason,
+        };
+      }
 
       // Perform Codex analysis
       let codexAnalysis:
@@ -498,24 +502,19 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
 
       if (useCodex && this.codexAvailable) {
         try {
-          codexAnalysis = await this.performCodexAnalysis(content, filePath);
-
-          // Convert Codex analysis to issues only if suggestions are enabled
-          if (includeSuggestions) {
-            this.convertCodexAnalysisToIssues(codexAnalysis, issues);
-          }
+          codexAnalysis = await this.performCodexAnalysis(
+            content,
+            filePath,
+            includeSuggestions
+          );
         } catch (error) {
           console.warn(`Codex analysis failed for ${filePath}:`, error);
         }
       }
 
-      const score = this.calculateFileScore(issues);
-
       return {
         path: filePath,
         status: "reviewed",
-        issues,
-        score,
         codexAnalysis,
       };
     } catch (error) {
@@ -523,128 +522,32 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
       return {
         path: filePath,
         status: "error",
-        issues: [
-          {
-            type: "error",
-            message: "Error occurred while processing file",
-          },
-        ],
-        score: 0,
       };
     }
   }
 
-  private calculateFileScore(
-    issues: CodeReviewResult["files"][0]["issues"]
-  ): number {
-    if (issues.length === 0) return 100;
-
-    let score = 100;
-    issues.forEach((issue) => {
-      switch (issue.type) {
-        case "error":
-          score -= 20;
-          break;
-        case "warning":
-          score -= 10;
-          break;
-        case "suggestion":
-          score -= 5;
-          break;
-      }
-    });
-
-    return Math.max(0, score);
-  }
-
-  private calculateOverallScore(files: CodeReviewResult["files"]): number {
-    if (files.length === 0) return 100;
-
-    // Only include non-skipped files in score calculation
-    const reviewableFiles = files.filter((file) => file.status !== "skipped");
-    if (reviewableFiles.length === 0) return 100;
-
-    const totalScore = reviewableFiles.reduce(
-      (sum, file) => sum + file.score,
-      0
-    );
-    return Math.round(totalScore / reviewableFiles.length);
-  }
-
   private generateSummary(
     gitStatus: GitStatus,
-    files: CodeReviewResult["files"],
-    overallScore: number
+    files: CodeReviewResult["files"]
   ): string {
-    const totalIssues = files.reduce(
-      (sum, file) => sum + file.issues.length,
-      0
-    );
-    const errorCount = files.reduce(
-      (sum, file) =>
-        sum + file.issues.filter((issue) => issue.type === "error").length,
-      0
-    );
-    const warningCount = files.reduce(
-      (sum, file) =>
-        sum + file.issues.filter((issue) => issue.type === "warning").length,
-      0
+    const reviewedFiles = files.filter((file) => file.status === "reviewed");
+    const codexAnalyzedFiles = files.filter((file) => file.codexAnalysis);
+    const skippedFiles = files.filter((file) => file.status === "skipped");
+    const errorFiles = files.filter(
+      (file) => file.status === "error" || file.status === "inaccessible"
     );
 
-    return (
-      `Reviewed ${files.length} files in branch '${gitStatus.branch}'. ` +
-      `Overall score: ${overallScore}/100. ` +
-      `Issues found: ${totalIssues} (Errors: ${errorCount}, Warnings: ${warningCount})`
-    );
-  }
+    let summary = `Reviewed ${reviewedFiles.length} files in branch '${gitStatus.branch}'. `;
+    summary += `Codex analyzed: ${codexAnalyzedFiles.length} files.`;
 
-  private generateRecommendations(
-    files: CodeReviewResult["files"],
-    gitStatus: GitStatus
-  ): string[] {
-    const recommendations: string[] = [];
-
-    // Git status-based recommendations
-    if (gitStatus.ahead > 0) {
-      recommendations.push(
-        `You have ${gitStatus.ahead} commits locally. Consider pushing to remote repository.`
-      );
+    if (skippedFiles.length > 0) {
+      summary += ` Skipped: ${skippedFiles.length} files.`;
+    }
+    if (errorFiles.length > 0) {
+      summary += ` Errors: ${errorFiles.length} files.`;
     }
 
-    if (gitStatus.behind > 0) {
-      recommendations.push(
-        `Remote repository has ${gitStatus.behind} new commits. Consider pulling.`
-      );
-    }
-
-    if (gitStatus.untracked.length > 0) {
-      recommendations.push(
-        `${gitStatus.untracked.length} untracked files found. Add to .gitignore or commit them.`
-      );
-    }
-
-    // Code quality-based recommendations
-    const lowScoreFiles = files.filter((file) => file.score < 70);
-    if (lowScoreFiles.length > 0) {
-      recommendations.push(
-        `${lowScoreFiles.length} files have low scores. Code quality improvement needed.`
-      );
-    }
-
-    const filesWithErrors = files.filter((file) =>
-      file.issues.some((issue) => issue.type === "error")
-    );
-    if (filesWithErrors.length > 0) {
-      recommendations.push(
-        `${filesWithErrors.length} files have errors. Fix them as priority.`
-      );
-    }
-
-    if (recommendations.length === 0) {
-      recommendations.push("Code quality is good!");
-    }
-
-    return recommendations;
+    return summary;
   }
 
   // Check if Codex CLI is available
@@ -660,17 +563,22 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
   // Perform Codex analysis on TypeScript code using Codex CLI
   private async performCodexAnalysis(
     content: string,
-    filePath: string
+    filePath: string,
+    includeSuggestions: boolean = true
   ): Promise<CodeReviewResult["files"][0]["codexAnalysis"]> {
     try {
       // Create Codex prompt with file content
-      const prompt = this.buildCodexPrompt(filePath, content);
+      const prompt = this.buildCodexPrompt(
+        filePath,
+        content,
+        includeSuggestions
+      );
 
       // Execute Codex CLI
       const result = await this.executeCodexCLI(prompt, filePath);
 
       // Parse the result
-      return this.parseCodexResponse(result);
+      return this.parseCodexResponse(result, includeSuggestions);
     } catch (error) {
       throw new Error(
         `Codex analysis failed: ${
@@ -709,28 +617,51 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
   }
 
   // Build prompt for Codex analysis
-  private buildCodexPrompt(filePath: string, content: string): string {
-    return `Analyze the following TypeScript code and provide a comprehensive code review focusing on:
+  private buildCodexPrompt(
+    filePath: string,
+    content: string,
+    includeSuggestions: boolean = true
+  ): string {
+    const basePrompt = `Analyze the following TypeScript code and provide a comprehensive code review focusing on:
 
 1. **Context**: What does this code do?
 2. **Security Issues**: Any security vulnerabilities or concerns
 3. **Performance Issues**: Performance bottlenecks or inefficiencies  
 4. **Architecture Issues**: Design patterns, coupling, separation of concerns
-5. **Logic Issues**: Potential bugs, edge cases, logical errors
-6. **Suggestions**: Specific improvement recommendations
+5. **Logic Issues**: Potential bugs, edge cases, logical errors`;
+
+    const suggestionsSection = includeSuggestions
+      ? `
+6. **Suggestions**: Specific improvement recommendations`
+      : "";
+
+    // Escape backticks in content to prevent markdown code block conflicts
+    const escapedContent = this.escapeCodeBlockDelimiters(content);
+
+    return `${basePrompt}${suggestionsSection}
 
 File: ${filePath}
 
 \`\`\`typescript
-${content}
+${escapedContent}
 \`\`\`
 
 Provide detailed analysis with specific examples from the code.`;
   }
 
+  // Escape code block delimiters to prevent markdown conflicts
+  private escapeCodeBlockDelimiters(content: string): string {
+    // Replace various markdown code block patterns with safe alternatives
+    return content
+      .replace(/```/g, "\\`\\`\\`") // Triple backticks
+      .replace(/``/g, "\\`\\`") // Double backticks
+      .replace(/`/g, "\\`"); // Single backticks
+  }
+
   // Parse Codex response
   private parseCodexResponse(
-    response: string
+    response: string,
+    includeSuggestions: boolean = true
   ): CodeReviewResult["files"][0]["codexAnalysis"] {
     // Extract the actual analysis content (remove Codex CLI headers)
     const lines = response.split("\n");
@@ -746,30 +677,42 @@ Provide detailed analysis with specific examples from the code.`;
         .trim();
     }
 
+    // Parse structured sections if suggestions are included
+    let securityIssues: string[] = [];
+    let performanceIssues: string[] = [];
+    let architectureIssues: string[] = [];
+    let logicIssues: string[] = [];
+    let suggestions: string[] = [];
+
+    if (includeSuggestions && analysisContent) {
+      // Simple parsing of structured sections
+      const sections = analysisContent.split(/\*\*(.*?)\*\*/g);
+      for (let i = 1; i < sections.length; i += 2) {
+        const sectionName = sections[i]?.toLowerCase() || "";
+        const sectionContent = sections[i + 1] || "";
+
+        if (sectionName.includes("security")) {
+          securityIssues.push(sectionContent.trim());
+        } else if (sectionName.includes("performance")) {
+          performanceIssues.push(sectionContent.trim());
+        } else if (sectionName.includes("architecture")) {
+          architectureIssues.push(sectionContent.trim());
+        } else if (sectionName.includes("logic")) {
+          logicIssues.push(sectionContent.trim());
+        } else if (sectionName.includes("suggestion")) {
+          suggestions.push(sectionContent.trim());
+        }
+      }
+    }
+
     return {
       context: analysisContent,
-      securityIssues: [],
-      performanceIssues: [],
-      architectureIssues: [],
-      logicIssues: [],
-      suggestions: [],
+      securityIssues,
+      performanceIssues,
+      architectureIssues,
+      logicIssues,
+      suggestions,
     };
-  }
-
-  // Convert Codex analysis to issues
-  private convertCodexAnalysisToIssues(
-    analysis: CodeReviewResult["files"][0]["codexAnalysis"],
-    issues: CodeReviewResult["files"][0]["issues"]
-  ): void {
-    if (!analysis) return;
-
-    // Add the natural language analysis as a single comprehensive issue
-    issues.push({
-      type: "suggestion",
-      message: "Codex Analysis",
-      category: "style",
-      suggestion: analysis.context,
-    });
   }
 }
 

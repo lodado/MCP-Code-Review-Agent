@@ -1,11 +1,10 @@
 # my-mcp-server
 
-A Model Context Protocol (MCP) server built with [mcp-framework](https://github.com/QuantGeekDev/mcp-framework). This server provides powerful tools for intelligent code review using both static analysis and OpenAI's Codex AI, weather information, and general utilities.
+A Model Context Protocol (MCP) server built with [mcp-framework](https://github.com/QuantGeekDev/mcp-framework). This server provides intelligent code review using OpenAI's Codex AI, weather information, and general utilities.
 
 ## Features
 
 - 🧠 **Intelligent Code Review**: Advanced TypeScript code analysis using OpenAI's Codex AI
-- 🔍 **Static Analysis**: Traditional pattern-based code review for quick feedback
 - 🌤️ **Weather API Tool**: Real-time weather information for cities
 - 🛠️ **Example Tool**: General-purpose message processing
 
@@ -78,14 +77,6 @@ Performs automated code review based on Git status analysis.
 
 **Features:**
 
-#### 🔍 Static Analysis
-
-- ✅ Git status analysis (branch, commits, staged/modified files)
-- ✅ TypeScript file validation
-- ✅ Security checks (path traversal, file access)
-- ✅ Basic code quality patterns (type safety, logging, line length, TODO comments)
-- ✅ Scoring system (0-100 points per file)
-
 #### 🧠 Codex CLI Analysis
 
 - ✅ **Context Understanding**: Analyzes code purpose and functionality using [OpenAI Codex CLI](https://github.com/openai/codex)
@@ -100,7 +91,6 @@ Performs automated code review based on Git status analysis.
 - ✅ Categorized issues (Security 🔒, Performance ⚡, Architecture 🏗️, Logic 🧩, Style 🎨)
 - ✅ Context-aware analysis
 - ✅ Detailed recommendations
-- ✅ Fallback to static analysis if Codex unavailable
 
 ### 🌤️ Weather API Tool (`weather_api`)
 
@@ -247,36 +237,18 @@ Add this configuration to your Claude Desktop config file:
 2. Run `npm run build` to compile
 3. The server will automatically load your tools on startup
 
-## Code Quality Scoring (Example MCP using Codex)
+## Code Quality Analysis (Using Codex)
 
-The Codex Review Tool uses a comprehensive scoring system:
+The Codex Review Tool uses intelligent AI analysis to provide comprehensive code review:
 
-- **Starting Score**: 100 points per file
-- **Error Issues**: -20 points each
-- **Warning Issues**: -10 points each
-- **Suggestion Issues**: -5 points each
-- **Minimum Score**: 0 points
-
-### Issue Types Detected
+### Analysis Areas
 
 **TypeScript/JavaScript:**
-- `any` type usage
-- `console.log` statements
-- Long lines (>120 characters)
-- TODO/FIXME comments
-- Function complexity
-
-**Python:**
-- `print()` statements
-- Long lines (>88 characters, PEP 8)
-
-**Java:**
-- `System.out.println` statements
-- Long lines (>120 characters)
-
-**Go:**
-- `fmt.Println` statements
-- Long lines (>100 characters)
+- Code structure and organization
+- Type safety and best practices
+- Performance optimization opportunities
+- Security vulnerability detection
+- Architecture and design pattern analysis
 
 ## Learn More
 
