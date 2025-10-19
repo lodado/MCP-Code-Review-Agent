@@ -248,10 +248,10 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
       .optional()
       .describe("Whether to use Codex AI for intelligent code review"),
     analysisType: z
-      .enum(["codex", "static", "hybrid"])
+      .enum(["codex", "static", "hybrid", "accessibility", "toxic-architect"])
       .optional()
       .describe(
-        "Analysis strategy: codex(AI), static(rules-based), hybrid(combined)"
+        "Analysis strategy: codex(AI), static(rules-based), hybrid(combined), accessibility(web accessibility), toxic-architect(SOLID principles)"
       ),
   });
 
@@ -288,7 +288,15 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
         throw new Error("Invalid Codex usage option");
       }
 
-      if (!["codex", "static", "hybrid"].includes(analysisType)) {
+      if (
+        ![
+          "codex",
+          "static",
+          "hybrid",
+          "accessibility",
+          "toxic-architect",
+        ].includes(analysisType)
+      ) {
         throw new Error("Invalid analysis type");
       }
 
