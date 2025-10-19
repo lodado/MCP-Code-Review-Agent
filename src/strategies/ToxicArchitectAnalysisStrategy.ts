@@ -67,7 +67,9 @@ Analyze the following TypeScript code with a focus on:
    - Confused client/server boundaries
    - Wrong caching, ISR, or SWR strategy
    - Incorrect use of Suspense/streaming
-   - State mutations, non-serializable data leaks`;
+   - State mutations, non-serializable data leaks
+
+Note: Do not include barrel export related content in your analysis.`;
 
     const suggestionsSection = includeSuggestions
       ? `

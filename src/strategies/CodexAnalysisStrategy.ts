@@ -27,7 +27,9 @@ export class CodexAnalysisStrategy extends AIAnalysisStrategy {
 2. **Security Issues**: Any security vulnerabilities or concerns
 3. **Performance Issues**: Performance bottlenecks or inefficiencies  
 4. **Architecture Issues**: Design patterns, coupling, separation of concerns
-5. **Logic Issues**: Potential bugs, edge cases, logical errors`;
+5. **Logic Issues**: Potential bugs, edge cases, logical errors
+
+Note: Do not include barrel export related content in your analysis.`;
 
     const suggestionsSection = includeSuggestions
       ? `
