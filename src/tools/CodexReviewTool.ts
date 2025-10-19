@@ -1,6 +1,5 @@
 import { MCPTool } from "mcp-framework";
 import { z } from "zod";
-import { Codex } from "@openai/codex-sdk";
 import { execSync } from "child_process";
 import {
   readFileSync,
@@ -11,12 +10,19 @@ import {
   realpathSync,
 } from "fs";
 import { resolve, normalize, relative } from "path";
+import pLimit from "p-limit";
+import {
+  AnalysisStrategyFactory,
+  AnalysisType,
+} from "../strategies/AnalysisStrategyFactory.js";
+import { CodeAnalysisStrategy } from "../strategies/CodeAnalysisStrategy.js";
 
 interface CodexReviewInput {
   repositoryPath?: string;
   reviewType?: "full" | "staged" | "modified";
   includeSuggestions?: boolean;
   useCodex?: boolean;
+  analysisType?: AnalysisType;
 }
 
 interface GitStatus {
@@ -49,15 +55,13 @@ interface CodeReviewResult {
 class CodexReviewTool extends MCPTool<CodexReviewInput> {
   name = "codex_review";
   description =
-    "Performs intelligent code review using OpenAI Codex SDK for TypeScript files";
+    "Performs intelligent code review using configurable analysis strategies for TypeScript files";
 
-  // Codex SDK instance
-  private codex: Codex;
-  private codexAvailable: boolean = false;
+  // Analysis strategy
+  private analysisStrategy: CodeAnalysisStrategy | null = null;
 
   constructor() {
     super();
-    this.codex = new Codex();
   }
 
   // Maximum file size (50KB for better analysis quality)
@@ -243,14 +247,25 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
       .boolean()
       .optional()
       .describe("Whether to use Codex AI for intelligent code review"),
+    analysisType: z
+      .enum(["codex", "static", "hybrid"])
+      .optional()
+      .describe(
+        "Analysis strategy: codex(AI), static(rules-based), hybrid(combined)"
+      ),
   });
 
   async execute(input: CodexReviewInput): Promise<string> {
     const {
       repositoryPath = process.env.DEFAULT_REPO_PATH || process.cwd(),
-      reviewType = (process.env.DEFAULT_REVIEW_TYPE as "full" | "staged" | "modified") || "modified",
+      reviewType = (process.env.DEFAULT_REVIEW_TYPE as
+        | "full"
+        | "staged"
+        | "modified") || "modified",
       includeSuggestions = process.env.DEFAULT_INCLUDE_SUGGESTIONS === "true",
       useCodex = process.env.DEFAULT_USE_CODEX === "true",
+      analysisType = (process.env.DEFAULT_ANALYSIS_TYPE as AnalysisType) ||
+        "codex",
     } = input;
 
     console.log("test", input);
@@ -273,15 +288,13 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
         throw new Error("Invalid Codex usage option");
       }
 
-      // Check Codex CLI availability if Codex is enabled
-      if (useCodex) {
-        this.codexAvailable = await this.checkCodexAvailability();
-        if (!this.codexAvailable) {
-          throw new Error(
-            "Codex CLI is required but not available. Please install and authenticate Codex CLI."
-          );
-        }
+      if (!["codex", "static", "hybrid"].includes(analysisType)) {
+        throw new Error("Invalid analysis type");
       }
+
+      // Initialize analysis strategy
+      this.analysisStrategy =
+        AnalysisStrategyFactory.createStrategy(analysisType);
 
       console.log("Analyzing Git status...");
       // Analyze Git status
@@ -294,18 +307,20 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
         return "No files to review. All files are clean!";
       }
 
-      // Perform code review for each file
-      const reviewResults: CodeReviewResult["files"] = [];
+      // Perform code review for each file (parallel processing)
+      const limit = pLimit(3); // Limit to 3 concurrent Codex calls
+      const reviewPromises = filesToReview.map((filePath) =>
+        limit(() =>
+          this.reviewFile(
+            filePath,
+            repositoryPath,
+            includeSuggestions,
+            useCodex
+          )
+        )
+      );
 
-      for (const filePath of filesToReview) {
-        const review = await this.reviewFile(
-          filePath,
-          repositoryPath,
-          includeSuggestions,
-          useCodex
-        );
-        reviewResults.push(review);
-      }
+      const reviewResults = await Promise.all(reviewPromises);
 
       const result: CodeReviewResult = {
         summary: this.generateSummary(gitStatus, reviewResults),
@@ -506,20 +521,29 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
         };
       }
 
-      // Perform Codex analysis
+      // Perform analysis using the selected strategy
       let codexAnalysis:
         | CodeReviewResult["files"][0]["codexAnalysis"]
         | undefined;
 
-      if (useCodex && this.codexAvailable) {
+      if (this.analysisStrategy) {
         try {
-          codexAnalysis = await this.performCodexAnalysis(
+          const analysisResult = await this.analysisStrategy.performAnalysis(
             content,
             filePath,
             includeSuggestions
           );
+
+          codexAnalysis = {
+            context: analysisResult.context,
+            securityIssues: analysisResult.securityIssues,
+            performanceIssues: analysisResult.performanceIssues,
+            architectureIssues: analysisResult.architectureIssues,
+            logicIssues: analysisResult.logicIssues,
+            suggestions: analysisResult.suggestions,
+          };
         } catch (error) {
-          console.warn(`Codex analysis failed for ${filePath}:`, error);
+          console.warn(`Analysis failed for ${filePath}:`, error);
         }
       }
 
@@ -559,153 +583,6 @@ class CodexReviewTool extends MCPTool<CodexReviewInput> {
     }
 
     return summary;
-  }
-
-  // Check if Codex SDK is available
-  private async checkCodexAvailability(): Promise<boolean> {
-    try {
-      // Test Codex SDK by starting a simple thread
-      const thread = this.codex.startThread();
-      const turn = await thread.run("Hello, are you working?");
-
-      this.codexAvailable = turn.finalResponse !== undefined;
-      return this.codexAvailable;
-    } catch (error) {
-      console.warn("Codex SDK availability check failed:", error);
-      this.codexAvailable = false;
-      return false;
-    }
-  }
-
-  // Perform Codex analysis on TypeScript code using Codex SDK
-  private async performCodexAnalysis(
-    content: string,
-    filePath: string,
-    includeSuggestions: boolean = true
-  ): Promise<CodeReviewResult["files"][0]["codexAnalysis"]> {
-    try {
-      // Create Codex prompt with file content
-      const prompt = this.buildCodexPrompt(
-        filePath,
-        content,
-        includeSuggestions
-      );
-
-      // Execute Codex SDK
-      const thread = this.codex.startThread();
-      const turn = await thread.run(prompt);
-
-      // Parse the result
-      return this.parseCodexResponse(
-        turn.finalResponse || "",
-        includeSuggestions
-      );
-    } catch (error) {
-      throw new Error(
-        `Codex analysis failed: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`
-      );
-    }
-  }
-
-  // Build prompt for Codex analysis
-  private buildCodexPrompt(
-    filePath: string,
-    content: string,
-    includeSuggestions: boolean = true
-  ): string {
-    const basePrompt = `Analyze the following TypeScript code and provide a comprehensive code review focusing on:
-
-1. **Context**: What does this code do?
-2. **Security Issues**: Any security vulnerabilities or concerns
-3. **Performance Issues**: Performance bottlenecks or inefficiencies  
-4. **Architecture Issues**: Design patterns, coupling, separation of concerns
-5. **Logic Issues**: Potential bugs, edge cases, logical errors`;
-
-    const suggestionsSection = includeSuggestions
-      ? `
-6. **Suggestions**: Specific improvement recommendations`
-      : "";
-
-    // Escape backticks in content to prevent markdown code block conflicts
-    const escapedContent = this.escapeCodeBlockDelimiters(content);
-
-    return `${basePrompt}${suggestionsSection}
-
-File: ${filePath}
-
-\`\`\`typescript
-${escapedContent}
-\`\`\`
-
-Provide detailed analysis with specific examples from the code.`;
-  }
-
-  // Escape code block delimiters to prevent markdown conflicts
-  private escapeCodeBlockDelimiters(content: string): string {
-    // Replace various markdown code block patterns with safe alternatives
-    return content
-      .replace(/```/g, "\\`\\`\\`") // Triple backticks
-      .replace(/``/g, "\\`\\`") // Double backticks
-      .replace(/`/g, "\\`"); // Single backticks
-  }
-
-  // Parse Codex response
-  private parseCodexResponse(
-    response: string,
-    includeSuggestions: boolean = true
-  ): CodeReviewResult["files"][0]["codexAnalysis"] {
-    // Extract the actual analysis content (remove Codex CLI headers)
-    const lines = response.split("\n");
-    const analysisStart = lines.findIndex(
-      (line) => line.includes("codex") && !line.includes("OpenAI Codex v")
-    );
-
-    let analysisContent = response;
-    if (analysisStart !== -1) {
-      analysisContent = lines
-        .slice(analysisStart + 1)
-        .join("\n")
-        .trim();
-    }
-
-    // Parse structured sections if suggestions are included
-    let securityIssues: string[] = [];
-    let performanceIssues: string[] = [];
-    let architectureIssues: string[] = [];
-    let logicIssues: string[] = [];
-    let suggestions: string[] = [];
-
-    if (includeSuggestions && analysisContent) {
-      // Simple parsing of structured sections
-      const sections = analysisContent.split(/\*\*(.*?)\*\*/g);
-      for (let i = 1; i < sections.length; i += 2) {
-        const sectionName = sections[i]?.toLowerCase() || "";
-        const sectionContent = sections[i + 1] || "";
-
-        if (sectionName.includes("security")) {
-          securityIssues.push(sectionContent.trim());
-        } else if (sectionName.includes("performance")) {
-          performanceIssues.push(sectionContent.trim());
-        } else if (sectionName.includes("architecture")) {
-          architectureIssues.push(sectionContent.trim());
-        } else if (sectionName.includes("logic")) {
-          logicIssues.push(sectionContent.trim());
-        } else if (sectionName.includes("suggestion")) {
-          suggestions.push(sectionContent.trim());
-        }
-      }
-    }
-
-    return {
-      context: analysisContent,
-      securityIssues,
-      performanceIssues,
-      architectureIssues,
-      logicIssues,
-      suggestions,
-    };
   }
 }
 

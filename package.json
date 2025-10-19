@@ -20,7 +20,8 @@
   "dependencies": {
     "@openai/codex-sdk": "^0.47.0",
     "axios": "^1.12.2",
-    "mcp-framework": "^0.2.15"
+    "mcp-framework": "^0.2.15",
+    "p-limit": "^7.1.1"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",
