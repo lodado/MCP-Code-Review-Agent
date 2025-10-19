@@ -1,7 +1,9 @@
 import { MCPTool } from "mcp-framework";
 import { z } from "zod";
-import { getContainer } from "../composition/container.js";
+import { getContainer, createContainer } from "../composition/container";
 import { AnalysisType } from "../strategies/AnalysisStrategyFactory.js";
+import { AIClient } from "../domain/ports.js";
+import { CodexClient } from "../infrastructure/ai/CodexClient";
 
 interface CodexReviewInput {
   repositoryPath?: string;
@@ -14,8 +16,12 @@ interface CodexReviewInput {
 }
 
 export class CodexReviewTool extends MCPTool {
+  private aiClient: AIClient;
+
   constructor() {
     super();
+    // Use provided AIClient or default to CodexClient
+    this.aiClient = new CodexClient();
   }
 
   name = "codex_review";
@@ -84,8 +90,8 @@ export class CodexReviewTool extends MCPTool {
         throw new Error("Invalid analysis type");
       }
 
-      // Get dependency container
-      const container = getContainer();
+      // Get dependency container with AIClient injection
+      const container = createContainer(undefined, this.aiClient);
 
       // Execute code review using clean architecture
       const useCase = container.getCodeReviewUseCase(

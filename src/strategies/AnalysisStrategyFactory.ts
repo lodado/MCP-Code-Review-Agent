@@ -5,10 +5,18 @@ import { WebAccessibilityAnalysisStrategy } from "./WebAccessibilityAnalysisStra
 import { ToxicArchitectAnalysisStrategy } from "./ToxicArchitectAnalysisStrategy";
 import { AIClient } from "../domain/ports";
 
-export type AnalysisType = "codex" | "static" | "hybrid" | "accessibility" | "toxic-architect";
+export type AnalysisType =
+  | "codex"
+  | "static"
+  | "hybrid"
+  | "accessibility"
+  | "toxic-architect";
 
 export class AnalysisStrategyFactory {
-  static createStrategy(type: AnalysisType, aiClient?: AIClient): CodeAnalysisStrategy {
+  static createStrategy(
+    type: AnalysisType,
+    aiClient?: AIClient
+  ): CodeAnalysisStrategy {
     switch (type) {
       case "codex":
         if (!aiClient) {

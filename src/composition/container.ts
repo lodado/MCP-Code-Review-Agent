@@ -7,6 +7,7 @@ import {
   FileProcessor,
   Reporter,
   AnalysisConfig,
+  AIClient,
 } from "../domain/ports.js";
 
 import { NodeGitClient } from "../infrastructure/git/NodeGitClient.js";
@@ -27,7 +28,10 @@ import { createAnalysisConfig } from "../config/analysisConfig.js";
 export class DependencyContainer {
   private instances: Map<string, any> = new Map();
 
-  constructor(private config: AnalysisConfig = createAnalysisConfig()) {}
+  constructor(
+    private config: AnalysisConfig = createAnalysisConfig(),
+    private aiClient?: AIClient
+  ) {}
 
   // Infrastructure layer
   getGitClient(repoPath: string): GitClient {
@@ -45,9 +49,11 @@ export class DependencyContainer {
     return this.instances.get("fileSystem");
   }
 
-  getAIClient(): any {
+  getAIClient(): AIClient {
     if (!this.instances.has("aiClient")) {
-      this.instances.set("aiClient", new CodexClient());
+      // Use injected AIClient or fallback to CodexClient
+      const client = this.aiClient || new CodexClient();
+      this.instances.set("aiClient", client);
     }
     return this.instances.get("aiClient");
   }
@@ -140,13 +146,16 @@ export class DependencyContainer {
 // Singleton instance for global access
 let globalContainer: DependencyContainer | null = null;
 
-export function getContainer(): DependencyContainer {
+export function getContainer(aiClient?: AIClient): DependencyContainer {
   if (!globalContainer) {
-    globalContainer = new DependencyContainer();
+    globalContainer = new DependencyContainer(createAnalysisConfig(), aiClient);
   }
   return globalContainer;
 }
 
-export function createContainer(config?: AnalysisConfig): DependencyContainer {
-  return new DependencyContainer(config);
+export function createContainer(
+  config?: AnalysisConfig,
+  aiClient?: AIClient
+): DependencyContainer {
+  return new DependencyContainer(config || createAnalysisConfig(), aiClient);
 }

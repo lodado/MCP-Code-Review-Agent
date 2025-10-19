@@ -1,7 +1,4 @@
-import {
-  AIAnalysisStrategy,
-  CodeAnalysisResult,
-} from "./CodeAnalysisStrategy";
+import { AIAnalysisStrategy, CodeAnalysisResult } from "./CodeAnalysisStrategy";
 import { AIClient } from "../domain/ports";
 
 export class ToxicArchitectAnalysisStrategy extends AIAnalysisStrategy {
