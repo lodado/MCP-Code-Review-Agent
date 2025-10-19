@@ -36,19 +36,20 @@ cd MCP-Code-Review-Agent
 npm install
 npm run build
 npm link
+
 ```
 
 ### Basic Usage
 
 ```bash
 # Get balanced AI review (Codex)
-echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"codex_review","arguments":{"reviewType":"modified","analysisType":"codex"}}}' | node dist/index.js
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"codex_review","arguments":{"reviewType":"modified","analysisType":"codex"}}}' | node mcp-code-review-agent
 
 # Get accessibility expert review
-echo '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"codex_review","arguments":{"reviewType":"full","analysisType":"accessibility"}}}' | node dist/index.js
+echo '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"codex_review","arguments":{"reviewType":"full","analysisType":"accessibility"}}}' | node mcp-code-review-agent
 
 # Get brutally honest architect review (prepare for tough love!)
-echo '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"codex_review","arguments":{"reviewType":"full","analysisType":"toxic-architect"}}}' | node dist/index.js
+echo '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"codex_review","arguments":{"reviewType":"full","analysisType":"toxic-architect"}}}' | node mcp-code-review-agent
 ```
 
 ## 🤖 AI Review Agents & Personas
