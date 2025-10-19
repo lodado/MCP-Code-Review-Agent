@@ -1,27 +1,28 @@
-import { execSync } from "child_process";
+import { Codex } from "@openai/codex-sdk";
 import { AIClient } from "../../domain/ports.js";
 
 export class CodexClient implements AIClient {
+  private codex: Codex;
+
   constructor() {
-    // Set environment variable to skip git repo check
+    // Codex 인스턴스 초기화
+    this.codex = new Codex({
+      // (선택) auth, workspace 옵션 등 필요 시 추가
+    });
   }
 
   async analyze(prompt: string): Promise<string> {
     try {
-      const output = execSync(
-        `codex exec --sandbox workspace-write --skip-git-repo-check`,
-        {
-          input: prompt,
-          cwd: process.cwd(),
-          encoding: "utf8",
-          timeout: 1200000, // 2 minute timeout
-          maxBuffer: 1024 * 1024, // 1MB buffer
-        }
-      );
+      // Codex Thread 생성
+      const thread = this.codex.startThread();
 
-      return output.trim();
+      // prompt 실행
+      const turn = await thread.run(prompt, {});
+
+      // 최종 결과 반환
+      return (turn.finalResponse || "").trim();
     } catch (error) {
-      console.error("Codex execution error:", error);
+      console.error("Codex SDK execution error:", error);
       throw new Error(
         `Codex analysis failed: ${
           error instanceof Error ? error.message : "Unknown error"
@@ -31,9 +32,9 @@ export class CodexClient implements AIClient {
   }
 }
 
+// 테스트용 목업
 export class MockAIClient implements AIClient {
   async analyze(prompt: string): Promise<string> {
-    // Mock implementation for testing
     return `Mock analysis for prompt: ${prompt.substring(0, 100)}...`;
   }
 }
