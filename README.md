@@ -221,7 +221,7 @@ This tool is built as an MCP server that can be connected to MCP-compatible clie
    {
      "mcpServers": {
        "code-review-agent": {
-         "command": "mcp-code-review",
+         "command": "mcp-code-review-agent",
          "args": []
        }
      }

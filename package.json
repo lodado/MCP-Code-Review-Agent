@@ -16,7 +16,7 @@
   ],
   "type": "module",
   "bin": {
-    "mcp-code-review": "./dist/index.js"
+    "mcp-code-review-agent": "./dist/index.js"
   },
   "files": [
     "dist"
