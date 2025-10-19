@@ -1,10 +1,11 @@
-import pLimit from "p-limit";
+import { cpus } from "os";
 import {
   GitClient,
   FileSystem,
   Analyzer,
   PathPolicy,
   SuitabilityPolicy,
+  FileProcessor,
   ReviewType,
   AnalyzableFile,
   AnalysisOptions,
@@ -20,7 +21,8 @@ export class CodeReviewUseCase {
     private analyzer: Analyzer,
     private pathPolicy: PathPolicy,
     private suitabilityPolicy: SuitabilityPolicy,
-    private concurrencyLimit: number = 3
+    private fileProcessor: FileProcessor,
+    private concurrencyLimit: number = Math.max(1, Math.min(8, cpus().length))
   ) {}
 
   async execute(input: {
@@ -33,32 +35,22 @@ export class CodeReviewUseCase {
       // Get Git status
       const gitStatus = await this.gitClient.status(input.repositoryPath);
 
-      // Get files to review
+      // Get files to review (already filtered for TypeScript files)
       const filesToReview = await this.gitClient.filesForReview(
         input.repositoryPath,
         input.reviewType
       );
 
-      // Filter TypeScript files
-      const tsFiles = filesToReview.filter(
-        (file: string) => file.endsWith(".ts") || file.endsWith(".tsx")
-      );
-
-      // Remove duplicates
-      const uniqueFiles = Array.from(new Set(tsFiles));
-
       // Process files with concurrency limit
-      const limit = pLimit(this.concurrencyLimit);
-      const reviewPromises = uniqueFiles.map((filePath: string) =>
-        limit(async () =>
+      const reviewResults = await this.fileProcessor.processFiles(
+        filesToReview,
+        (filePath: string) =>
           this.reviewFile(input.repositoryPath, filePath, {
             includeSuggestions: input.includeSuggestions,
             analysisType: input.analysisType,
-          })
-        )
+          }),
+        this.concurrencyLimit
       );
-
-      const reviewResults = await Promise.all(reviewPromises);
 
       // Build summary
       const summary = this.buildSummary(gitStatus, reviewResults);
@@ -95,7 +87,20 @@ export class CodeReviewUseCase {
         };
       }
 
-      // Read file content
+      // Get file stats first to check size before reading
+      const stats = await this.fileSystem.stat(fullPath);
+
+      // Pre-check file size to avoid loading large files
+      const maxFileSize = 1024 * 1024; // 1MB limit
+      if (stats.size > maxFileSize) {
+        return {
+          path: filePath,
+          status: "skipped",
+          reason: `File too large (${stats.size} bytes > ${maxFileSize} bytes)`,
+        };
+      }
+
+      // Read file content only if size is acceptable
       const content = await this.fileSystem.read(fullPath);
 
       // Check file suitability
@@ -129,11 +134,25 @@ export class CodeReviewUseCase {
   }
 
   private buildSummary(gitStatus: GitStatus, files: ReviewedFile[]): string {
-    const reviewed = files.filter((f) => f.status === "reviewed").length;
-    const skipped = files.filter((f) => f.status === "skipped").length;
-    const errors = files.filter(
-      (f) => f.status === "error" || f.status === "inaccessible"
-    ).length;
+    // Single-pass counting for better performance
+    let reviewed = 0;
+    let skipped = 0;
+    let errors = 0;
+
+    for (const file of files) {
+      switch (file.status) {
+        case "reviewed":
+          reviewed++;
+          break;
+        case "skipped":
+          skipped++;
+          break;
+        case "error":
+        case "inaccessible":
+          errors++;
+          break;
+      }
+    }
 
     return `📊 Code Review Results
 ===================================================

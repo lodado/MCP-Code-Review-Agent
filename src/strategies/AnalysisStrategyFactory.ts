@@ -1,25 +1,38 @@
-import { CodeAnalysisStrategy } from "./CodeAnalysisStrategy.js";
-import { CodexAnalysisStrategy } from "./CodexAnalysisStrategy.js";
-import { TypeScriptStaticAnalysisStrategy } from "./TypeScriptStaticAnalysisStrategy.js";
-import { WebAccessibilityAnalysisStrategy } from "./WebAccessibilityAnalysisStrategy.js";
-import { ToxicArchitectAnalysisStrategy } from "./ToxicArchitectAnalysisStrategy.js";
+import { CodeAnalysisStrategy } from "./CodeAnalysisStrategy";
+import { CodexAnalysisStrategy } from "./CodexAnalysisStrategy";
+import { TypeScriptStaticAnalysisStrategy } from "./TypeScriptStaticAnalysisStrategy";
+import { WebAccessibilityAnalysisStrategy } from "./WebAccessibilityAnalysisStrategy";
+import { ToxicArchitectAnalysisStrategy } from "./ToxicArchitectAnalysisStrategy";
+import { AIClient } from "../domain/ports";
 
 export type AnalysisType = "codex" | "static" | "hybrid" | "accessibility" | "toxic-architect";
 
 export class AnalysisStrategyFactory {
-  static createStrategy(type: AnalysisType): CodeAnalysisStrategy {
+  static createStrategy(type: AnalysisType, aiClient?: AIClient): CodeAnalysisStrategy {
     switch (type) {
       case "codex":
-        return new CodexAnalysisStrategy();
+        if (!aiClient) {
+          throw new Error("AIClient is required for Codex analysis");
+        }
+        return new CodexAnalysisStrategy(aiClient);
       case "static":
         return new TypeScriptStaticAnalysisStrategy();
       case "hybrid":
         // For now, return Codex as hybrid. Can be extended to combine both strategies
-        return new CodexAnalysisStrategy();
+        if (!aiClient) {
+          throw new Error("AIClient is required for hybrid analysis");
+        }
+        return new CodexAnalysisStrategy(aiClient);
       case "accessibility":
-        return new WebAccessibilityAnalysisStrategy();
+        if (!aiClient) {
+          throw new Error("AIClient is required for accessibility analysis");
+        }
+        return new WebAccessibilityAnalysisStrategy(aiClient);
       case "toxic-architect":
-        return new ToxicArchitectAnalysisStrategy();
+        if (!aiClient) {
+          throw new Error("AIClient is required for toxic-architect analysis");
+        }
+        return new ToxicArchitectAnalysisStrategy(aiClient);
       default:
         throw new Error(`Unknown analysis type: ${type}`);
     }

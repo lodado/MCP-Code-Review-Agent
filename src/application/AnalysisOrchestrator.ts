@@ -3,11 +3,15 @@ import {
   AnalyzableFile,
   AnalysisOptions,
   AnalysisResult,
-} from "../domain/ports.js";
-import { AnalysisStrategyFactory } from "../strategies/AnalysisStrategyFactory.js";
+  AIClient,
+} from "../domain/ports";
+import { AnalysisStrategyFactory } from "../strategies/AnalysisStrategyFactory";
 
 export class AnalysisOrchestrator implements Analyzer {
-  constructor(private analysisType: string = "codex") {}
+  constructor(
+    private analysisType: string = "codex",
+    private aiClient?: AIClient
+  ) {}
 
   async analyze(
     file: AnalyzableFile,
@@ -16,7 +20,8 @@ export class AnalysisOrchestrator implements Analyzer {
     try {
       // Create strategy based on analysis type
       const strategy = AnalysisStrategyFactory.createStrategy(
-        this.analysisType as any
+        this.analysisType as any,
+        this.aiClient
       );
 
       // Perform analysis using the strategy

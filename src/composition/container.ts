@@ -4,6 +4,7 @@ import {
   Analyzer,
   PathPolicy,
   SuitabilityPolicy,
+  FileProcessor,
   Reporter,
   AnalysisConfig,
 } from "../domain/ports.js";
@@ -12,6 +13,7 @@ import { NodeGitClient } from "../infrastructure/git/NodeGitClient.js";
 import { NodeFileSystem } from "../infrastructure/filesystem/NodeFileSystem.js";
 import { CodexClient } from "../infrastructure/ai/CodexClient.js";
 import { SafePathPolicy } from "../infrastructure/path/SafePathPolicy.js";
+import { ConcurrentFileProcessor } from "../infrastructure/processing/ConcurrentFileProcessor.js";
 
 import { CodeReviewUseCase } from "../application/CodeReviewUseCase.js";
 import { AnalysisOrchestrator } from "../application/AnalysisOrchestrator.js";
@@ -67,11 +69,19 @@ export class DependencyContainer {
     return this.instances.get("suitabilityPolicy");
   }
 
+  getFileProcessor(): FileProcessor {
+    if (!this.instances.has("fileProcessor")) {
+      this.instances.set("fileProcessor", new ConcurrentFileProcessor());
+    }
+    return this.instances.get("fileProcessor");
+  }
+
   // Application layer
   getAnalyzer(analysisType: string = "codex"): Analyzer {
     const key = `analyzer_${analysisType}`;
     if (!this.instances.has(key)) {
-      const orchestrator = new AnalysisOrchestrator(analysisType);
+      const aiClient = this.getAIClient();
+      const orchestrator = new AnalysisOrchestrator(analysisType, aiClient);
       this.instances.set(key, orchestrator);
     }
     return this.instances.get(key);
@@ -91,6 +101,7 @@ export class DependencyContainer {
           this.getAnalyzer(analysisType),
           this.getPathPolicy(),
           this.getSuitabilityPolicy(),
+          this.getFileProcessor(),
           this.config.concurrency
         )
       );

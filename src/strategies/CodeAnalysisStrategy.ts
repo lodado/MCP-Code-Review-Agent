@@ -55,17 +55,14 @@ export interface CodeAnalysisResult {
 
 // Abstract class for AI-based analysis
 export abstract class AIAnalysisStrategy extends CodeAnalysisStrategy {
-  protected abstract getAIProvider(): any; // Codex, OpenAI, etc.
+  protected abstract getAIProvider(): any; // AIClient implementation
 
   async analyzeCode(content: string, filePath: string): Promise<string> {
     const aiProvider = this.getAIProvider();
     const prompt = this.buildPrompt(content, filePath, true);
 
-    // Execute AI analysis
-    const thread = aiProvider.startThread();
-    const turn = await thread.run(prompt);
-
-    return turn.finalResponse || "";
+    // Execute AI analysis using the AIClient interface
+    return await aiProvider.analyze(prompt);
   }
 }
 

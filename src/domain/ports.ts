@@ -39,6 +39,14 @@ export interface SuitabilityPolicy {
   check(path: string, content: string): SuitabilityResult;
 }
 
+export interface FileProcessor {
+  processFiles(
+    files: string[],
+    processor: (filePath: string) => Promise<ReviewedFile>,
+    concurrencyLimit: number
+  ): Promise<ReviewedFile[]>;
+}
+
 // Domain types
 export type ReviewType = "staged" | "modified" | "full";
 

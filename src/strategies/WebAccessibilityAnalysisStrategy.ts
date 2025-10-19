@@ -1,19 +1,19 @@
-import { Codex } from "@openai/codex-sdk";
 import {
   AIAnalysisStrategy,
   CodeAnalysisResult,
-} from "./CodeAnalysisStrategy.js";
+} from "./CodeAnalysisStrategy";
+import { AIClient } from "../domain/ports";
 
 export class WebAccessibilityAnalysisStrategy extends AIAnalysisStrategy {
-  private codex: Codex;
+  private aiClient: AIClient;
 
-  constructor() {
+  constructor(aiClient: AIClient) {
     super();
-    this.codex = new Codex();
+    this.aiClient = aiClient;
   }
 
-  protected getAIProvider(): Codex {
-    return this.codex;
+  protected getAIProvider(): AIClient {
+    return this.aiClient;
   }
 
   buildPrompt(

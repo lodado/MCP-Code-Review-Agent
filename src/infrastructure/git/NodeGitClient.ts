@@ -92,19 +92,33 @@ export class NodeGitClient implements GitClient {
   async filesForReview(repoPath: string, type: ReviewType): Promise<string[]> {
     const gitStatus = await this.status(repoPath);
 
+    let files: string[] = [];
     switch (type) {
       case "staged":
-        return gitStatus.staged;
+        files = gitStatus.staged;
+        break;
       case "modified":
-        return [...gitStatus.staged, ...gitStatus.modified];
+        files = [...gitStatus.staged, ...gitStatus.modified];
+        break;
       case "full":
-        return [
+        files = [
           ...gitStatus.staged,
           ...gitStatus.modified,
           ...gitStatus.untracked,
         ];
+        break;
       default:
         throw new Error(`Unknown review type: ${type}`);
     }
+
+    // Filter TypeScript files (case-insensitive) and remove duplicates
+    const tsFiles = files.filter((file: string) => /\.(ts|tsx)$/i.test(file));
+
+    // Remove duplicates and normalize paths
+    const uniqueFiles = Array.from(
+      new Set(tsFiles.map((file) => file.toLowerCase()))
+    );
+
+    return uniqueFiles;
   }
 }
