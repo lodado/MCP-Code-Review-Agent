@@ -35,27 +35,28 @@ export class CodexReviewTool extends MCPTool {
       .describe("Path to the Git repository to review"),
     reviewType: z
       .enum(["full", "staged", "modified"])
-      .optional()
+      .default("modified")
       .describe("Type of files to review: full(all), staged, or modified"),
     includeSuggestions: z
       .boolean()
-      .optional()
+      .default(true)
       .describe("Whether to include improvement suggestions"),
     useCodex: z
       .boolean()
-      .optional()
+      .default(true)
       .describe(
         "Whether to use Codex AI for intelligent code review (deprecated - use analysisType)"
       ),
     analysisType: z
       .enum(["codex", "static", "hybrid", "accessibility", "toxic-architect"])
       .optional()
+      .default("codex")
       .describe(
         "Analysis strategy: codex(AI), static(rules-based), hybrid(combined), accessibility(web accessibility), toxic-architect(SOLID principles)"
       ),
     outputFormat: z
       .enum(["text", "json"])
-      .optional()
+      .default("json")
       .describe("Output format: text (default) or json"),
     noEmoji: z.boolean().optional().describe("Disable emoji in output"),
   });
