@@ -63,14 +63,41 @@ Provide detailed analysis with specific examples from the code.`;
         .trim();
     }
 
-    // Return raw response without parsing for demonstration
+    // Parse structured sections
+    let securityIssues: string[] = [];
+    let performanceIssues: string[] = [];
+    let architectureIssues: string[] = [];
+    let logicIssues: string[] = [];
+    let suggestions: string[] = [];
+
+    if (analysisContent) {
+      // Simple parsing of structured sections
+      const sections = analysisContent.split(/\*\*(.*?)\*\*/g);
+      for (let i = 1; i < sections.length; i += 2) {
+        const sectionName = sections[i]?.toLowerCase() || "";
+        const sectionContent = sections[i + 1] || "";
+
+        if (sectionName.includes("security")) {
+          securityIssues.push(sectionContent.trim());
+        } else if (sectionName.includes("performance")) {
+          performanceIssues.push(sectionContent.trim());
+        } else if (sectionName.includes("architecture")) {
+          architectureIssues.push(sectionContent.trim());
+        } else if (sectionName.includes("logic")) {
+          logicIssues.push(sectionContent.trim());
+        } else if (sectionName.includes("suggestion")) {
+          suggestions.push(sectionContent.trim());
+        }
+      }
+    }
+
     return {
-      context: analysisContent, // Raw AI response
-      securityIssues: [],
-      performanceIssues: [],
-      architectureIssues: [],
-      logicIssues: [],
-      suggestions: [],
+      context: analysisContent,
+      securityIssues,
+      performanceIssues,
+      architectureIssues,
+      logicIssues,
+      suggestions,
     };
   }
 
