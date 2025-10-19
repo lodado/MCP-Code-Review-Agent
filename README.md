@@ -5,6 +5,26 @@
 
 A sophisticated code review tool built with the Model Context Protocol (MCP) framework, designed to improve code quality through multiple AI-powered analysis strategies with distinct personas and expertise areas.
 
+## 🔐 Prerequisites
+
+### Codex CLI Login & Permissions
+
+This tool requires **Codex CLI** to be installed and authenticated. You need to log in to Codex and have the necessary permissions to use the AI-powered analysis features.
+
+**Required Steps:**
+
+1. **Install Codex CLI** (if not already installed)
+2. **Login to Codex** using your credentials
+3. **Ensure proper permissions** for AI analysis features
+
+**Codex CLI Resources:**
+
+- [Codex CLI Documentation](https://codex.com/docs/cli)
+- [Codex CLI Installation Guide](https://codex.com/docs/cli/installation)
+- [Codex Authentication Guide](https://codex.com/docs/cli/authentication)
+
+**Note**: Without proper Codex CLI authentication, the AI-powered analysis strategies (Codex, Toxic Architect, Accessibility Expert) will not function. Only the static analysis strategy will be available.
+
 ## 🚀 Quick Start
 
 ### Installation
