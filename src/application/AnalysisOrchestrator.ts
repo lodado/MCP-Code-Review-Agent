@@ -5,7 +5,7 @@ import {
   AnalysisResult,
   AIClient,
 } from "../domain/ports";
-import { AnalysisStrategyFactory } from "../strategies/AnalysisStrategyFactory";
+import { AnalysisStrategyFactory } from "../strategies/AnalysisStrategyFactory.js";
 
 export class AnalysisOrchestrator implements Analyzer {
   constructor(

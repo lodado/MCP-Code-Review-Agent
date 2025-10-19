@@ -1,5 +1,5 @@
-import { AIAnalysisStrategy, CodeAnalysisResult } from "./CodeAnalysisStrategy";
-import { AIClient } from "../domain/ports";
+import { AIAnalysisStrategy, CodeAnalysisResult } from "./CodeAnalysisStrategy.js";
+import { AIClient } from "../domain/ports.js";
 
 export class ToxicArchitectAnalysisStrategy extends AIAnalysisStrategy {
   private aiClient: AIClient;

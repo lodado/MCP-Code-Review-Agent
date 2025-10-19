@@ -1,8 +1,5 @@
-import {
-  AIAnalysisStrategy,
-  CodeAnalysisResult,
-} from "./CodeAnalysisStrategy";
-import { AIClient } from "../domain/ports";
+import { AIAnalysisStrategy, CodeAnalysisResult } from "./CodeAnalysisStrategy.js";
+import { AIClient } from "../domain/ports.js";
 
 export class WebAccessibilityAnalysisStrategy extends AIAnalysisStrategy {
   private aiClient: AIClient;
@@ -69,7 +66,6 @@ ${escapedContent}
 \`\`\`
 
 Please provide a detailed accessibility-focused code review with specific examples and actionable recommendations. Focus on practical, implementable solutions that improve the user experience for all users, including those with disabilities.`;
-
   }
 
   parseResponse(response: string): CodeAnalysisResult {
@@ -101,15 +97,30 @@ Please provide a detailed accessibility-focused code review with specific exampl
         const sectionName = sections[i]?.toLowerCase() || "";
         const sectionContent = sections[i + 1] || "";
 
-        if (sectionName.includes("accessibility") || sectionName.includes("wcag")) {
+        if (
+          sectionName.includes("accessibility") ||
+          sectionName.includes("wcag")
+        ) {
           securityIssues.push(sectionContent.trim()); // Use securityIssues for accessibility issues
-        } else if (sectionName.includes("semantic") || sectionName.includes("seo")) {
+        } else if (
+          sectionName.includes("semantic") ||
+          sectionName.includes("seo")
+        ) {
           performanceIssues.push(sectionContent.trim()); // Use performanceIssues for semantic/SEO issues
-        } else if (sectionName.includes("react") || sectionName.includes("component")) {
+        } else if (
+          sectionName.includes("react") ||
+          sectionName.includes("component")
+        ) {
           architectureIssues.push(sectionContent.trim()); // Use architectureIssues for React patterns
-        } else if (sectionName.includes("performance") || sectionName.includes("ux")) {
+        } else if (
+          sectionName.includes("performance") ||
+          sectionName.includes("ux")
+        ) {
           logicIssues.push(sectionContent.trim()); // Use logicIssues for UX/performance issues
-        } else if (sectionName.includes("recommendation") || sectionName.includes("improvement")) {
+        } else if (
+          sectionName.includes("recommendation") ||
+          sectionName.includes("improvement")
+        ) {
           suggestions.push(sectionContent.trim());
         }
       }

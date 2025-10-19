@@ -1,9 +1,9 @@
-import { CodeAnalysisStrategy } from "./CodeAnalysisStrategy";
-import { CodexAnalysisStrategy } from "./CodexAnalysisStrategy";
-import { TypeScriptStaticAnalysisStrategy } from "./TypeScriptStaticAnalysisStrategy";
-import { WebAccessibilityAnalysisStrategy } from "./WebAccessibilityAnalysisStrategy";
-import { ToxicArchitectAnalysisStrategy } from "./ToxicArchitectAnalysisStrategy";
-import { AIClient } from "../domain/ports";
+import { CodeAnalysisStrategy } from "./CodeAnalysisStrategy.js";
+import { CodexAnalysisStrategy } from "./CodexAnalysisStrategy.js";
+import { TypeScriptStaticAnalysisStrategy } from "./TypeScriptStaticAnalysisStrategy.js";
+import { WebAccessibilityAnalysisStrategy } from "./WebAccessibilityAnalysisStrategy.js";
+import { ToxicArchitectAnalysisStrategy } from "./ToxicArchitectAnalysisStrategy.js";
+import { AIClient } from "../domain/ports.js";
 
 export type AnalysisType =
   | "codex"

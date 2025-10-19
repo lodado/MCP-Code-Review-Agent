@@ -1,9 +1,9 @@
 import { MCPTool } from "mcp-framework";
 import { z } from "zod";
-import { getContainer, createContainer } from "../composition/container";
+import { getContainer, createContainer } from "../composition/container.js";
 import { AnalysisType } from "../strategies/AnalysisStrategyFactory.js";
 import { AIClient } from "../domain/ports.js";
-import { CodexClient } from "../infrastructure/ai/CodexClient";
+import { CodexClient } from "../infrastructure/ai/CodexClient.js";
 
 interface CodexReviewInput {
   repositoryPath?: string;
