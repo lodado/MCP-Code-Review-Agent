@@ -1,84 +1,34 @@
 # MCP Code Review Agent
 
+> **Personal Use Repository**  
+> This is a personal repository for my own use. Feel free to use it if you find it helpful.
+
 A sophisticated code review tool built with the Model Context Protocol (MCP) framework, designed to improve code quality through multiple AI-powered analysis strategies with distinct personas and expertise areas.
 
-## 🎯 Purpose & Goals
+## 🚀 Quick Start
 
-This project was created to explore the potential of **AI-powered code review** using different specialized personas. The goal is to demonstrate how various AI agents with distinct personalities and expertise can provide comprehensive code quality improvements from multiple perspectives.
+### Installation
 
-### Why This Project Exists
-
-- **Personal Code Quality Improvement**: Use MCP agents to continuously improve code quality through automated reviews
-- **Multi-Perspective Analysis**: Leverage different AI personas (senior architect, accessibility expert, etc.) to get diverse feedback
-- **Learning Tool**: Understand how different AI personalities approach code review and what insights they provide
-- **MCP Framework Exploration**: Experiment with the Model Context Protocol for building AI-powered development tools
-
-### The Vision
-
-Imagine having a team of expert code reviewers available 24/7, each with their own specialty:
-
-- A **brutally honest senior architect** who catches SOLID violations and architectural flaws
-- A **web accessibility expert** who ensures inclusive design
-- An **AI-powered generalist** who provides comprehensive analysis
-- A **rule-based analyzer** for consistent, fast feedback
-
-This tool makes that vision a reality through MCP agents with distinct personas and expertise areas.
-
-## 🏗️ Architecture Overview
-
-This project implements a **Clean Architecture** pattern with clear separation of concerns. The architecture was designed based on comprehensive code review feedback from MCP agents - I had no involvement in the architectural decisions!
-
-### Architecture Layers
-
-```
-┌─────────────────────────────────────┐
-│           Presentation Layer         │ ← CLI output, JSON reports
-├─────────────────────────────────────┤
-│         Application Layer            │ ← Use Case orchestration
-├─────────────────────────────────────┤
-│           Domain Layer               │ ← Business logic, port interfaces
-├─────────────────────────────────────┤
-│        Infrastructure Layer         │ ← Git, FS, AI Provider implementations
-└─────────────────────────────────────┘
+```bash
+# Clone and build the tool locally (package not yet published to npm)
+git clone https://github.com/lodado/MCP-Code-Review-Agent
+cd MCP-Code-Review-Agent
+npm install
+npm run build
+npm link
 ```
 
-The architecture follows Clean Architecture principles with clear separation of concerns, making it easy to add new analysis strategies and maintain the codebase.
+### Basic Usage
 
-## 📁 Project Structure
+```bash
+# Get balanced AI review (Codex)
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"codex_review","arguments":{"reviewType":"modified","analysisType":"codex"}}}' | node dist/index.js
 
-```
-src/
-├── domain/                    # Domain Layer
-│   ├── ports.ts              # Port interfaces (contracts)
-│   └── entities.ts           # Business entities and logic
-├── application/              # Application Layer
-│   ├── CodeReviewUseCase.ts  # Main business orchestration
-│   └── AnalysisOrchestrator.ts # Analysis strategy coordination
-├── infrastructure/           # Infrastructure Layer
-│   ├── git/
-│   │   └── NodeGitClient.ts  # Git operations adapter
-│   ├── filesystem/
-│   │   └── NodeFileSystem.ts # File system operations adapter
-│   ├── ai/
-│   │   └── CodexClient.ts    # AI provider adapter
-│   └── path/
-│       └── SafePathPolicy.ts # Path security validation
-├── presentation/             # Presentation Layer
-│   ├── CliReporter.ts        # Text output formatter
-│   └── JsonReporter.ts       # JSON output formatter
-├── strategies/               # Analysis Strategies
-│   ├── CodeAnalysisStrategy.ts      # Abstract base strategy
-│   ├── CodexAnalysisStrategy.ts     # AI-powered analysis
-│   ├── WebAccessibilityAnalysisStrategy.ts # Accessibility-focused
-│   ├── ToxicArchitectAnalysisStrategy.ts  # Architecture-focused
-│   ├── TypeScriptStaticAnalysisStrategy.ts # Rule-based analysis
-│   └── AnalysisStrategyFactory.ts   # Strategy factory
-├── composition/              # Dependency Injection
-│   └── container.ts          # DI container and wiring
-├── config/                   # Configuration
-│   └── analysisConfig.ts     # Analysis settings
-└── tools/                    # MCP Tools
-    └── CodexReviewTool.ts    # Main MCP tool (thin wrapper)
+# Get accessibility expert review
+echo '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"codex_review","arguments":{"reviewType":"full","analysisType":"accessibility"}}}' | node dist/index.js
+
+# Get brutally honest architect review (prepare for tough love!)
+echo '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"codex_review","arguments":{"reviewType":"full","analysisType":"toxic-architect"}}}' | node dist/index.js
 ```
 
 ## 🤖 AI Review Agents & Personas
@@ -125,26 +75,7 @@ This tool features multiple AI agents, each with distinct personalities and expe
 - **Focus**: Multiple perspectives in one review
 - **Best for**: When you want comprehensive coverage
 
-## 🚀 Key Capabilities
-
-- **Multi-Persona Reviews**: Get feedback from different AI personalities and expertise areas
-- **Parallel Processing**: Multiple files analyzed concurrently using `p-limit`
-- **Path Security**: Safe path validation preventing directory traversal attacks
-- **File Filtering**: Intelligent filtering based on file type, size, and complexity
-- **Git Integration**: Seamless integration with Git repositories
-- **Multiple Output Formats**: Text and JSON output support
-- **Configurable Analysis**: Customizable analysis parameters and limits
-- **Personal Code Quality Journey**: Continuous improvement through AI-powered feedback
-
-## 🛠️ Installation
-
-```bash
-npm install
-npm run build
-npm link
-```
-
-## 📖 Usage
+## 📖 Detailed Usage
 
 ### Method 1: Direct Execution (Development)
 
@@ -232,6 +163,147 @@ If you're using an MCP client (like Cursor, Claude Desktop, etc.), the tool will
 - `DEFAULT_USE_CODEX`: Default Codex usage (deprecated)
 - `DEFAULT_ANALYSIS_TYPE`: Default analysis type
 - `NO_EMOJI`: Disable emoji globally
+
+## 🤖 AI Provider & MCP Connection
+
+### Current AI Provider: OpenAI Codex
+
+This tool currently uses **OpenAI Codex** as the primary AI provider for intelligent code analysis. The Codex integration provides sophisticated code understanding and review capabilities across multiple programming languages.
+
+**Note**: The tool is designed to be provider-agnostic and can be extended to support other AI providers in the future.
+
+### MCP (Model Context Protocol) Connection
+
+This tool is built as an MCP server that can be connected to MCP-compatible clients. Here's how to connect:
+
+#### For MCP-Compatible IDEs/Editors
+
+1. **Clone and build the tool locally** (package not yet published to npm):
+
+   ```bash
+   git clone https://github.com/lodado/MCP-Code-Review-Agent
+   cd MCP-Code-Review-Agent
+   npm install
+   npm run build
+   npm link
+   ```
+
+   **Future**: Once published to npm, you'll be able to install with:
+
+   ```bash
+   npm install -g mcp-code-review-agent
+   ```
+
+2. **Configure your MCP client** (e.g., codex, Claude Desktop):
+
+   ```json
+   {
+     "mcpServers": {
+       "code-review-agent": {
+         "command": "mcp-code-review",
+         "args": []
+       }
+     }
+   }
+   ```
+
+3. **Use the tool** through your MCP client's interface
+
+#### ⚠️ Cursor IDE Limitation
+
+**Important**: Due to permission restrictions in Cursor IDE, this MCP tool may not work properly when connected through Cursor's MCP integration. The tool requires file system access and Git operations that may be restricted by Cursor's security model.
+
+**Workaround**: Use the tool directly via command line or through other MCP-compatible clients that have appropriate permissions.
+
+## 🚀 Key Capabilities
+
+- **Multi-Persona Reviews**: Get feedback from different AI personalities and expertise areas
+- **Parallel Processing**: Multiple files analyzed concurrently using `p-limit`
+- **Path Security**: Safe path validation preventing directory traversal attacks
+- **File Filtering**: Intelligent filtering based on file type, size, and complexity
+- **Git Integration**: Seamless integration with Git repositories
+- **Multiple Output Formats**: Text and JSON output support
+- **Configurable Analysis**: Customizable analysis parameters and limits
+- **Personal Code Quality Journey**: Continuous improvement through AI-powered feedback
+
+## 🎯 Purpose & Goals
+
+This project was created to explore the potential of **AI-powered code review** using different specialized personas. The goal is to demonstrate how various AI agents with distinct personalities and expertise can provide comprehensive code quality improvements from multiple perspectives.
+
+### Why This Project Exists
+
+- **Personal Code Quality Improvement**: Use MCP agents to continuously improve code quality through automated reviews
+- **Multi-Perspective Analysis**: Leverage different AI personas (senior architect, accessibility expert, etc.) to get diverse feedback
+- **Learning Tool**: Understand how different AI personalities approach code review and what insights they provide
+- **MCP Framework Exploration**: Experiment with the Model Context Protocol for building AI-powered development tools
+
+### The Vision
+
+Imagine having a team of expert code reviewers available 24/7, each with their own specialty:
+
+- A **brutally honest senior architect** who catches SOLID violations and architectural flaws
+- A **web accessibility expert** who ensures inclusive design
+- An **AI-powered generalist** who provides comprehensive analysis
+- A **rule-based analyzer** for consistent, fast feedback
+
+This tool makes that vision a reality through MCP agents with distinct personas and expertise areas.
+
+## 🏗️ Architecture Overview
+
+This project implements a **Clean Architecture** pattern with clear separation of concerns. The architecture was designed based on comprehensive code review feedback from MCP agents - I had no involvement in the architectural decisions!
+
+### Architecture Layers
+
+```
+┌─────────────────────────────────────┐
+│           Presentation Layer         │ ← CLI output, JSON reports
+├─────────────────────────────────────┤
+│         Application Layer            │ ← Use Case orchestration
+├─────────────────────────────────────┤
+│           Domain Layer               │ ← Business logic, port interfaces
+├─────────────────────────────────────┤
+│        Infrastructure Layer         │ ← Git, FS, AI Provider implementations
+└─────────────────────────────────────┘
+```
+
+The architecture follows Clean Architecture principles with clear separation of concerns, making it easy to add new analysis strategies and maintain the codebase.
+
+## 📁 Project Structure
+
+```
+src/
+├── domain/                    # Domain Layer
+│   ├── ports.ts              # Port interfaces (contracts)
+│   └── entities.ts           # Business entities and logic
+├── application/              # Application Layer
+│   ├── CodeReviewUseCase.ts  # Main business orchestration
+│   └── AnalysisOrchestrator.ts # Analysis strategy coordination
+├── infrastructure/           # Infrastructure Layer
+│   ├── git/
+│   │   └── NodeGitClient.ts  # Git operations adapter
+│   ├── filesystem/
+│   │   └── NodeFileSystem.ts # File system operations adapter
+│   ├── ai/
+│   │   └── CodexClient.ts    # AI provider adapter
+│   └── path/
+│       └── SafePathPolicy.ts # Path security validation
+├── presentation/             # Presentation Layer
+│   ├── CliReporter.ts        # Text output formatter
+│   └── JsonReporter.ts       # JSON output formatter
+├── strategies/               # Analysis Strategies
+│   ├── CodeAnalysisStrategy.ts      # Abstract base strategy
+│   ├── CodexAnalysisStrategy.ts     # AI-powered analysis
+│   ├── WebAccessibilityAnalysisStrategy.ts # Accessibility-focused
+│   ├── ToxicArchitectAnalysisStrategy.ts  # Architecture-focused
+│   ├── TypeScriptStaticAnalysisStrategy.ts # Rule-based analysis
+│   └── AnalysisStrategyFactory.ts   # Strategy factory
+├── composition/              # Dependency Injection
+│   └── container.ts          # DI container and wiring
+├── config/                   # Configuration
+│   └── analysisConfig.ts     # Analysis settings
+└── tools/                    # MCP Tools
+    └── CodexReviewTool.ts    # Main MCP tool (thin wrapper)
+```
 
 ## 🏛️ Architecture Details
 

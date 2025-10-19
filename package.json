@@ -1,10 +1,22 @@
 {
-  "name": "@lodado/mcp-lists",
+  "name": "mcp-code-review-agent",
   "version": "0.0.3",
-  "description": "@lodado/mcp-lists MCP server",
+  "description": "AI-powered code review tool with multiple analysis strategies using Model Context Protocol (MCP)",
+  "keywords": [
+    "mcp",
+    "code-review",
+    "ai",
+    "typescript",
+    "static-analysis",
+    "code-quality",
+    "accessibility",
+    "architecture",
+    "openai",
+    "codex"
+  ],
   "type": "module",
   "bin": {
-    "mcp-lists": "./dist/index.js"
+    "mcp-code-review": "./dist/index.js"
   },
   "files": [
     "dist"
@@ -32,5 +44,12 @@
   },
   "engines": {
     "node": ">=18.19.0"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/chungheonlee/mcp-code-review-agent-test.git"
+  },
+  "author": "chungheonlee",
+  "license": "MIT",
+  "homepage": "https://github.com/chungheonlee/mcp-code-review-agent-test#readme"
 }
