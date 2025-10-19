@@ -1,258 +1,352 @@
-# my-mcp-server
+# MCP Code Review Agent
 
-A Model Context Protocol (MCP) server built with [mcp-framework](https://github.com/QuantGeekDev/mcp-framework). This server provides intelligent code review using OpenAI's Codex AI, weather information, and general utilities.
+A sophisticated code review tool built with the Model Context Protocol (MCP) framework, designed to improve code quality through multiple AI-powered analysis strategies with distinct personas and expertise areas.
 
-## Features
+## 🎯 Purpose & Goals
 
-- 🧠 **Intelligent Code Review**: Advanced TypeScript code analysis using OpenAI's Codex AI
-- 🌤️ **Weather API Tool**: Real-time weather information for cities
-- 🛠️ **Example Tool**: General-purpose message processing
+This project was created to explore the potential of **AI-powered code review** using different specialized personas. The goal is to demonstrate how various AI agents with distinct personalities and expertise can provide comprehensive code quality improvements from multiple perspectives.
 
-## Quick Start
+### Why This Project Exists
+
+- **Personal Code Quality Improvement**: Use MCP agents to continuously improve code quality through automated reviews
+- **Multi-Perspective Analysis**: Leverage different AI personas (senior architect, accessibility expert, etc.) to get diverse feedback
+- **Learning Tool**: Understand how different AI personalities approach code review and what insights they provide
+- **MCP Framework Exploration**: Experiment with the Model Context Protocol for building AI-powered development tools
+
+### The Vision
+
+Imagine having a team of expert code reviewers available 24/7, each with their own specialty:
+
+- A **brutally honest senior architect** who catches SOLID violations and architectural flaws
+- A **web accessibility expert** who ensures inclusive design
+- An **AI-powered generalist** who provides comprehensive analysis
+- A **rule-based analyzer** for consistent, fast feedback
+
+This tool makes that vision a reality through MCP agents with distinct personas and expertise areas.
+
+## 🏗️ Architecture Overview
+
+This project implements a **Clean Architecture** pattern with clear separation of concerns. The architecture was designed based on comprehensive code review feedback from MCP agents - I had no involvement in the architectural decisions!
+
+### Architecture Layers
+
+```
+┌─────────────────────────────────────┐
+│           Presentation Layer         │ ← CLI output, JSON reports
+├─────────────────────────────────────┤
+│         Application Layer            │ ← Use Case orchestration
+├─────────────────────────────────────┤
+│           Domain Layer               │ ← Business logic, port interfaces
+├─────────────────────────────────────┤
+│        Infrastructure Layer         │ ← Git, FS, AI Provider implementations
+└─────────────────────────────────────┘
+```
+
+The architecture follows Clean Architecture principles with clear separation of concerns, making it easy to add new analysis strategies and maintain the codebase.
+
+## 📁 Project Structure
+
+```
+src/
+├── domain/                    # Domain Layer
+│   ├── ports.ts              # Port interfaces (contracts)
+│   └── entities.ts           # Business entities and logic
+├── application/              # Application Layer
+│   ├── CodeReviewUseCase.ts  # Main business orchestration
+│   └── AnalysisOrchestrator.ts # Analysis strategy coordination
+├── infrastructure/           # Infrastructure Layer
+│   ├── git/
+│   │   └── NodeGitClient.ts  # Git operations adapter
+│   ├── filesystem/
+│   │   └── NodeFileSystem.ts # File system operations adapter
+│   ├── ai/
+│   │   └── CodexClient.ts    # AI provider adapter
+│   └── path/
+│       └── SafePathPolicy.ts # Path security validation
+├── presentation/             # Presentation Layer
+│   ├── CliReporter.ts        # Text output formatter
+│   └── JsonReporter.ts       # JSON output formatter
+├── strategies/               # Analysis Strategies
+│   ├── CodeAnalysisStrategy.ts      # Abstract base strategy
+│   ├── CodexAnalysisStrategy.ts     # AI-powered analysis
+│   ├── WebAccessibilityAnalysisStrategy.ts # Accessibility-focused
+│   ├── ToxicArchitectAnalysisStrategy.ts  # Architecture-focused
+│   ├── TypeScriptStaticAnalysisStrategy.ts # Rule-based analysis
+│   └── AnalysisStrategyFactory.ts   # Strategy factory
+├── composition/              # Dependency Injection
+│   └── container.ts          # DI container and wiring
+├── config/                   # Configuration
+│   └── analysisConfig.ts     # Analysis settings
+└── tools/                    # MCP Tools
+    └── CodexReviewTool.ts    # Main MCP tool (thin wrapper)
+```
+
+## 🤖 AI Review Agents & Personas
+
+This tool features multiple AI agents, each with distinct personalities and expertise areas, providing comprehensive code review from different perspectives.
+
+### 1. **Codex Analysis** (`codex`) - The Generalist
+
+- **Persona**: Balanced AI code reviewer
+- **Expertise**: Comprehensive analysis across all areas
+- **Style**: Professional, thorough, and constructive
+- **Focus**: Security, performance, architecture, and logic issues
+- **Best for**: General code quality improvement
+
+### 2. **Toxic Architect** (`toxic-architect`) - The Perfectionist
+
+- **Persona**: Brutally honest senior architect with zero tolerance for poor code
+- **Expertise**: SOLID principles, Clean Architecture, design patterns
+- **Style**: Sarcastic, condescending, but technically accurate
+- **Focus**: Architectural flaws, SOLID violations, design pattern misuse
+- **Best for**: When you need tough love and architectural discipline
+
+### 3. **Web Accessibility Expert** (`accessibility`) - The Inclusive Designer
+
+- **Persona**: Senior Frontend Publisher with 10+ years of accessibility experience
+- **Expertise**: WCAG compliance, semantic web, React accessibility
+- **Style**: Professional, detail-oriented, user-focused
+- **Focus**: Web accessibility, inclusive design, semantic HTML
+- **Best for**: Frontend code, especially React/TypeScript components
+
+### 4. **Static Analyzer** (`static`) - The Rule Enforcer
+
+- **Persona**: Consistent, rule-based code analyzer
+- **Expertise**: TypeScript patterns, code metrics, complexity analysis
+- **Style**: Systematic, objective, fast
+- **Focus**: Code metrics, complexity, basic patterns
+- **Best for**: Quick feedback and consistent rule enforcement
+
+### 5. **Hybrid Analysis** (`hybrid`) - The Team Player
+
+- **Persona**: Combines multiple analysis approaches
+- **Expertise**: Best of all worlds
+- **Style**: Comprehensive and balanced
+- **Focus**: Multiple perspectives in one review
+- **Best for**: When you want comprehensive coverage
+
+## 🚀 Key Capabilities
+
+- **Multi-Persona Reviews**: Get feedback from different AI personalities and expertise areas
+- **Parallel Processing**: Multiple files analyzed concurrently using `p-limit`
+- **Path Security**: Safe path validation preventing directory traversal attacks
+- **File Filtering**: Intelligent filtering based on file type, size, and complexity
+- **Git Integration**: Seamless integration with Git repositories
+- **Multiple Output Formats**: Text and JSON output support
+- **Configurable Analysis**: Customizable analysis parameters and limits
+- **Personal Code Quality Journey**: Continuous improvement through AI-powered feedback
+
+## 🛠️ Installation
 
 ```bash
-# Install dependencies
 npm install
+npm run build
+npm link
+```
 
-# Set up Codex CLI
-npm install -g @openai/codex
-# Or: brew install codex
+## 📖 Usage
 
-# Authenticate with Codex CLI
-codex
+### Method 1: Direct Execution (Development)
 
+```bash
+# Get balanced AI review (Codex)
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"codex_review","arguments":{"reviewType":"modified","analysisType":"codex"}}}' | node dist/index.js
+
+# Get accessibility expert review
+echo '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"codex_review","arguments":{"reviewType":"full","analysisType":"accessibility"}}}' | node dist/index.js
+
+# Get brutally honest architect review (prepare for tough love!)
+echo '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"codex_review","arguments":{"reviewType":"full","analysisType":"toxic-architect"}}}' | node dist/index.js
+
+# Get quick static analysis
+echo '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"codex_review","arguments":{"reviewType":"modified","analysisType":"static"}}}' | node dist/index.js
+
+# Get comprehensive hybrid review
+echo '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"codex_review","arguments":{"reviewType":"full","analysisType":"hybrid"}}}' | node dist/index.js
+```
+
+### Method 2: Global Installation (Production)
+
+After running `npm link`, you can use the tool globally from any directory:
+
+```bash
+# Install globally (run once after npm link)
+npm link
+
+# Now you can use it from anywhere:
+# Get balanced AI review (Codex)
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"codex_review","arguments":{"reviewType":"modified","analysisType":"codex"}}}' | mcp-code-review-agent
+
+# Get accessibility expert review
+echo '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"codex_review","arguments":{"reviewType":"full","analysisType":"accessibility"}}}' | mcp-code-review-agent
+
+# Get brutally honest architect review
+echo '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"codex_review","arguments":{"reviewType":"full","analysisType":"toxic-architect"}}}' | mcp-code-review-agent
+
+# Get quick static analysis
+echo '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"codex_review","arguments":{"reviewType":"modified","analysisType":"static"}}}' | mcp-code-review-agent
+
+# Get comprehensive hybrid review
+echo '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"codex_review","arguments":{"reviewType":"full","analysisType":"hybrid"}}}' | mcp-code-review-agent
+```
+
+### Method 3: MCP Client Integration
+
+If you're using an MCP client (like Cursor, Claude Desktop, etc.), the tool will be automatically available as `codex_review` with the following parameters:
+
+```json
+{
+  "name": "codex_review",
+  "arguments": {
+    "repositoryPath": "/path/to/your/repo",
+    "reviewType": "modified",
+    "analysisType": "codex",
+    "includeSuggestions": true,
+    "outputFormat": "text",
+    "noEmoji": false
+  }
+}
+```
+
+### When to Use Each Agent
+
+- **Codex**: Daily development, general code quality
+- **Toxic Architect**: When you need architectural discipline and tough feedback
+- **Accessibility Expert**: Frontend development, React components, user-facing code
+- **Static Analyzer**: Quick feedback, CI/CD pipelines, consistent rule enforcement
+- **Hybrid**: Comprehensive reviews, important milestones, final checks
+
+### Parameters
+
+- `repositoryPath`: Path to Git repository (default: current directory)
+- `reviewType`: Type of files to review (`full`, `staged`, `modified`)
+- `analysisType`: Analysis strategy (`codex`, `static`, `hybrid`, `accessibility`, `toxic-architect`)
+- `includeSuggestions`: Include improvement suggestions (default: `true`)
+- `outputFormat`: Output format (`text`, `json`)
+- `noEmoji`: Disable emoji in output
+
+### Environment Variables
+
+- `DEFAULT_REPO_PATH`: Default repository path
+- `DEFAULT_INCLUDE_SUGGESTIONS`: Default suggestion inclusion
+- `DEFAULT_USE_CODEX`: Default Codex usage (deprecated)
+- `DEFAULT_ANALYSIS_TYPE`: Default analysis type
+- `NO_EMOJI`: Disable emoji globally
+
+## 🏛️ Architecture Details
+
+### Domain Layer
+
+The domain layer contains the core business logic and defines the contracts (ports) that external dependencies must implement.
+
+**Key Components:**
+
+- `ports.ts`: Interface definitions for all external dependencies
+- `entities.ts`: Business entities with domain logic
+
+### Application Layer
+
+The application layer orchestrates the business logic and coordinates between different services.
+
+**Key Components:**
+
+- `CodeReviewUseCase`: Main orchestration logic
+- `AnalysisOrchestrator`: Manages analysis strategy selection and execution
+
+### Infrastructure Layer
+
+The infrastructure layer provides concrete implementations of the domain interfaces.
+
+**Key Components:**
+
+- `NodeGitClient`: Git operations using Node.js child processes
+- `NodeFileSystem`: File system operations using Node.js fs module
+- `CodexClient`: OpenAI Codex SDK integration
+- `SafePathPolicy`: Security-focused path validation
+
+### Presentation Layer
+
+The presentation layer handles output formatting and user interface concerns.
+
+**Key Components:**
+
+- `CliReporter`: Human-readable text output
+- `JsonReporter`: Machine-readable JSON output
+
+## 🔧 Configuration
+
+### Analysis Configuration
+
+```typescript
+export const defaultAnalysisConfig: AnalysisConfig = {
+  maxFileSize: 50 * 1024, // 50KB
+  maxLines: 2500, // Maximum lines per file
+  maxFunctions: 50, // Maximum functions per file
+  maxClasses: 10, // Maximum classes per file
+  concurrency: 3, // Parallel processing limit
+  supportedExtensions: [".ts", ".tsx"],
+  excludedPatterns: [
+    "\\.d\\.ts$",
+    "\\.(test|spec)\\.tsx?$",
+    "/node_modules/",
+    "/dist/",
+    "/build/",
+  ],
+};
+```
+
+## 🧪 Testing
+
+```bash
 # Build the project
 npm run build
 
-# Link globally for testing
-npm link
-
-# Test the server
-my-mcp-server
+# Test with different analysis strategies
+npm test
 ```
 
-## Environment Setup
+## 🔒 Security Features
 
-Install and authenticate Codex CLI:
+- **Path Traversal Protection**: Prevents directory traversal attacks
+- **File Size Limits**: Prevents memory exhaustion from large files
+- **Input Validation**: Comprehensive input sanitization and validation
+- **Safe Git Operations**: Secure Git command execution
 
-```bash
-# Install Codex CLI globally
-npm install -g @openai/codex
-# Or using Homebrew
-brew install codex
+## 🚀 Performance Features
 
-# Authenticate with your ChatGPT account
-codex
-```
+- **Parallel Processing**: Concurrent file analysis using `p-limit`
+- **Intelligent Filtering**: Skip unsuitable files early
+- **Memory Management**: Efficient file size and complexity checks
+- **Caching**: Dependency injection container with instance caching
 
-Codex CLI will use your ChatGPT Plus, Pro, Team, Edu, or Enterprise plan for intelligent code analysis.
+## 📝 Development
 
-## Project Structure
+### Adding New Analysis Strategies
 
-```
-my-mcp-server/
-├── src/
-│   ├── tools/        # MCP Tools
-│   │   ├── CodexReviewTool.ts    # Git-based code review tool
-│   │   ├── WeatherTool.ts        # Weather API integration
-│   │   └── ExampleTool.ts        # Example tool
-│   └── index.ts      # Server entry point
-├── dist/             # Compiled JavaScript files
-├── package.json
-└── tsconfig.json
-```
+1. Create a new strategy class extending `CodeAnalysisStrategy`
+2. Implement the required abstract methods
+3. Register the strategy in `AnalysisStrategyFactory`
+4. Update the schema validation
 
-## Available Tools
+### Adding New Output Formats
 
-### 🔍 Codex Review Tool (`codex_review`)
+1. Create a new reporter implementing `Reporter` interface
+2. Register the reporter in the dependency container
+3. Update the tool's output format handling
 
-Performs automated code review based on Git status analysis.
+## 🤝 Contributing
 
-**Parameters:**
+This project follows clean architecture principles and SOLID design patterns. When contributing:
 
-- `repositoryPath` (optional): Path to the repository to review (default: current directory)
-- `reviewType` (optional): Type of review - "full", "staged", or "modified" (default: "modified")
-- `includeSuggestions` (optional): Include improvement suggestions (default: true)
-- `useCodex` (optional): Use OpenAI Codex AI for intelligent analysis (default: true)
+1. Maintain separation of concerns
+2. Use dependency injection
+3. Write tests for new features
+4. Follow the existing code structure
 
-**Features:**
+## 📄 License
 
-#### 🧠 Codex CLI Analysis
+MIT License - see LICENSE file for details.
 
-- ✅ **Context Understanding**: Analyzes code purpose and functionality using [OpenAI Codex CLI](https://github.com/openai/codex)
-- ✅ **Security Vulnerability Detection**: SQL injection, XSS, unsafe data handling
-- ✅ **Performance Optimization**: Identifies bottlenecks and inefficiencies
-- ✅ **Architecture Review**: SOLID principles, design patterns, coupling analysis
-- ✅ **Logic Error Detection**: Edge cases, race conditions, type safety
-- ✅ **Intelligent Suggestions**: Specific, actionable improvement recommendations
+---
 
-#### 📊 Enhanced Reporting
-
-- ✅ Categorized issues (Security 🔒, Performance ⚡, Architecture 🏗️, Logic 🧩, Style 🎨)
-- ✅ Context-aware analysis
-- ✅ Detailed recommendations
-
-### 🌤️ Weather API Tool (`weather_api`)
-
-Provides real-time weather information for cities using Open-Meteo API.
-
-**Parameters:**
-
-- `city`: City name to get weather information for
-
-**Features:**
-
-- Real-time weather data
-- Korean city name support
-- Temperature, humidity, wind speed, precipitation data
-- Weather condition descriptions
-
-### 🛠️ Example Tool (`example_tool`)
-
-A simple example tool for message processing.
-
-**Parameters:**
-
-- `message`: Message to process
-
-## Adding Components
-
-You can add more tools using the CLI:
-
-```bash
-# Add a new tool
-mcp add tool my-tool
-
-# Example tools you might create:
-mcp add tool data-processor
-mcp add tool api-client
-mcp add tool file-handler
-```
-
-## Tool Development
-
-Example tool structure:
-
-```typescript
-import { MCPTool } from "mcp-framework";
-import { z } from "zod";
-
-interface MyToolInput {
-  message: string;
-}
-
-class MyTool extends MCPTool<MyToolInput> {
-  name = "my_tool";
-  description = "Describes what your tool does";
-
-  schema = {
-    message: {
-      type: z.string(),
-      description: "Description of this input parameter",
-    },
-  };
-
-  async execute(input: MyToolInput) {
-    // Your tool logic here
-    return `Processed: ${input.message}`;
-  }
-}
-
-export default MyTool;
-```
-
-## Publishing to npm
-
-1. Update your package.json:
-
-   - Ensure `name` is unique and follows npm naming conventions
-   - Set appropriate `version`
-   - Add `description`, `author`, `license`, etc.
-   - Check `bin` points to the correct entry file
-
-2. Build and test locally:
-
-   ```bash
-   npm run build
-   npm link
-   my-mcp-server  # Test your CLI locally
-   ```
-
-3. Login to npm (create account if necessary):
-
-   ```bash
-   npm login
-   ```
-
-4. Publish your package:
-
-   ```bash
-   npm publish
-   ```
-
-After publishing, users can add it to their claude desktop client (read below) or run it with npx
-
-````
-
-## Using with Claude Desktop
-
-### Local Development
-
-Add this configuration to your Claude Desktop config file:
-
-**MacOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-**Windows**: `%APPDATA%/Claude/claude_desktop_config.json`
-
-```json
-{
-  "mcpServers": {
-    "my-mcp-server": {
-      "command": "my-mcp-server"
-    }
-  }
-}
-```
-
-### After Publishing
-
-Add this configuration to your Claude Desktop config file:
-
-**MacOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-**Windows**: `%APPDATA%/Claude/claude_desktop_config.json`
-
-```json
-{
-  "mcpServers": {
-    "my-mcp-server": {
-      "command": "npx",
-      "args": ["my-mcp-server"]
-    }
-  }
-}
-```
-
-## Building and Testing
-
-1. Make changes to your tools
-2. Run `npm run build` to compile
-3. The server will automatically load your tools on startup
-
-## Code Quality Analysis (Using Codex)
-
-The Codex Review Tool uses intelligent AI analysis to provide comprehensive code review:
-
-### Analysis Areas
-
-**TypeScript/JavaScript:**
-- Code structure and organization
-- Type safety and best practices
-- Performance optimization opportunities
-- Security vulnerability detection
-- Architecture and design pattern analysis
-
-## Learn More
-
-- [MCP Framework GitHub](https://github.com/QuantGeekDev/mcp-framework) - Core framework documentation
-- [MCP Framework Docs](https://mcp-framework.com) - Official documentation
-- [Model Context Protocol](https://modelcontextprotocol.io/) - MCP specification
-````
+**Note**: This architecture was designed based on comprehensive code review feedback from MCP agents. The architectural decisions, design patterns, and code structure were all determined by the AI review process - I had no involvement in the architectural design!
