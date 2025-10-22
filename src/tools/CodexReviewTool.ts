@@ -134,3 +134,5 @@ export class CodexReviewTool extends MCPTool {
     }
   }
 }
+
+export default CodexReviewTool;
