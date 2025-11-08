@@ -114,10 +114,19 @@ export class NodeGitClient implements GitClient {
     // Filter TypeScript files (case-insensitive) and remove duplicates
     const tsFiles = files.filter((file: string) => /\.(ts|tsx)$/i.test(file));
 
-    // Remove duplicates and normalize paths
-    const uniqueFiles = Array.from(
-      new Set(tsFiles.map((file) => file.toLowerCase()))
-    );
+    // Remove duplicates while preserving original case
+    const seen = new Set<string>();
+    const uniqueFiles: string[] = [];
+
+    for (const file of tsFiles) {
+      const normalized =
+        process.platform === "win32" ? file.toLowerCase() : file;
+
+      if (!seen.has(normalized)) {
+        seen.add(normalized);
+        uniqueFiles.push(file); // Keep original case
+      }
+    }
 
     return uniqueFiles;
   }

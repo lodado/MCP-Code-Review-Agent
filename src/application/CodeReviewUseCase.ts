@@ -78,6 +78,8 @@ export class CodeReviewUseCase {
       // Resolve and validate path
       const fullPath = this.pathPolicy.resolve(repositoryPath, filePath);
 
+      console.log("fullPath", fullPath, "~!!~");
+
       // Check if file exists and is accessible
       if (!(await this.fileSystem.exists(fullPath))) {
         return {
