@@ -10,6 +10,7 @@ export const defaultAnalysisConfig: AnalysisConfig = {
   excludedPatterns: [
     "\\.d\\.ts$",
     "\\.(test|spec)\\.tsx?$",
+    "(^|/)index\\.tsx$",
     "/node_modules/",
     "/dist/",
     "/build/",
